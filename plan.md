@@ -2,7 +2,7 @@
 
 ## Toward v0.1
 
-- [ ] Placeholder `beatz` and `track` modules
+- [x] Placeholder `beatz` and `track` modules
 - [ ] Import `sounds` module
 - [ ] Import `events` module
 - [ ] Set up a basic instrument
