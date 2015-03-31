@@ -24,7 +24,7 @@ static void print_err_if_bad(OSStatus status, NSString *whence) {
 
 void file_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
 
-  //printf("%s\n", __FUNCTION__);
+  printf("%s\n", __FUNCTION__);
   
   // TODO Set this in a more file-respecting manner.
   const int bytesPerFrame = 4;
@@ -34,7 +34,6 @@ void file_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef 
   
   ExtAudioFileRef audioFile = (ExtAudioFileRef)userData;
   assert(audioFile);
-
   
   AudioBuffer audioBuffer = {
     .mNumberChannels = 2,
@@ -56,71 +55,6 @@ void file_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef 
                                      0,
                                      NULL);
     print_err_if_bad(status, @"AudioQueueEnqueueBuffer");
-
-    const int cols = 175;
-    const int rows = 50;
-
-    const float range = INT16_MAX - INT16_MIN;
-
-    int16_t *samples = (int16_t *)buffer->mAudioData;
-
-    int y[cols];
-
-    // We use cols + 1 to give room for newlines; the final + 1 is for the NULL
-    // terminator.
-    char print_buffer[rows * (cols + 1) + 1];
-
-    float current_col = 0;
-    float col_delta = (float)cols / numFrames;
-
-    float sum = 0.0;
-    int num_samples = 0;
-
-    for (int i = 0; i < numFrames; ++i) {
-
-      // Our sample value here is in the range [0, 1].
-      float sample = ((float)*(samples + 2 * i) - INT16_MIN) / range;
-
-      //printf("sample = %g\n", sample);
-
-      // It seems most samples are smallish, so lets tweak them
-      // a bit for visibility.
-
-      float s = (sample - 0.5) * 20.0 + 0.5;
-      if (s < 0.0) s = 0.0;
-      if (s > 1.0) s = 1.0;
-
-      sum += s;
-      num_samples++;
-
-      float next_col = current_col + col_delta;
-      if (floor(next_col) > floor(current_col)) {
-
-        float avg = sum / num_samples;
-
-        //printf("avg = %g\n", avg);
-
-        y[(int)floor(current_col)] = (int)(avg * (rows - 1));
-
-        sum = 0.0;
-        num_samples = 0;
-      }
-
-      current_col = next_col;
-    }
-
-    char *print_c = print_buffer;
-    for (int r = 0; r < rows; ++r) {
-      for (int c = 0; c < cols; ++c) {
-        *print_c++ = (y[c] == r ? '*' : ' ');
-      }
-      *print_c++ = '\n';
-    }
-    *print_c = '\0';
-
-    printf("%s", print_buffer);
-
-    
   }
   
   if (numFrames < numFramesCapacity) {
