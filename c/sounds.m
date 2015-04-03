@@ -217,6 +217,13 @@ typedef struct {
   AudioQueueRef queue;
 } Audio;
 
+static int delete_sound_obj(lua_State* L) {
+  // TODO Free up all resources allocated for the sound object.
+  //      (I think it will be the only value on the stack.)
+  printf("***** %s\n", __FUNCTION__);
+  return 0;
+}
+
 // Function to load an audio file.
 static int loadfile(lua_State *L) {
   // TEMP TODO Remove debug stuff and clean up this fn.
@@ -227,7 +234,16 @@ static int loadfile(lua_State *L) {
 
   printf("Got the filename '%s'\n", filename);
 
+  // push new_obj = {}
   Audio *audio = lua_newuserdata(L, sizeof(Audio));
+
+  // push mt = {__gc = delete_sound_obj}
+  lua_newtable(L);
+  lua_pushcfunction(L, delete_sound_obj);
+  lua_setfield(L, -2, "__gc");
+
+  // setmetatable(new_obj, mt)
+  lua_setmetatable(L, -2);
 
   audio->queue = load_queue_for_file(filename);
 
