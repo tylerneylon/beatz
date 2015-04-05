@@ -11,6 +11,9 @@
 // This is the Lua registry key for the sounds metatable.
 #define sounds_mt "sounds_mt"
 
+
+// Internal types.
+
 typedef struct {
   AudioQueueRef   queue;  // TODO Is this used?
   ExtAudioFileRef audioFile;
@@ -20,9 +23,7 @@ typedef struct {
 } Sound;
 
 
-////////////////////////////////////////////////////////////
-// Begin caudio copy-over.
-////////////////////////////////////////////////////////////
+// Internal functions.
 
 static void print_err_if_bad(OSStatus status, NSString *whence) {
   if (status == 0) return;
@@ -33,167 +34,43 @@ static void print_err_if_bad(OSStatus status, NSString *whence) {
   NSLog(@"The error is %@", error);
 }
 
-static void print_some_frames(void *data, int num_frames) {
-  const int cols = 175;
-  const int rows = 50;
-
-  const float range = INT16_MAX - INT16_MIN;
-
-  int16_t *samples = (int16_t *)data;
-
-  int y[cols];
-
-  // We use cols + 1 to give room for newlines; the final + 1 is for the NULL
-  // terminator.
-  char print_buffer[rows * (cols + 1) + 1];
-
-  float current_col = 0;
-  float col_delta = (float)cols / num_frames;
-
-  float sum = 0.0;
-  int num_samples = 0;
-
-  for (int i = 0; i < num_frames; ++i) {
-
-    // Our sample value here is in the range [0, 1].
-    float sample = ((float)*(samples + 2 * i) - INT16_MIN) / range;
-
-    //printf("sample = %g\n", sample);
-
-    // It seems most samples are smallish, so lets tweak them
-    // a bit for visibility.
-
-    float s = (sample - 0.5) * 20.0 + 0.5;
-    if (s < 0.0) s = 0.0;
-    if (s > 1.0) s = 1.0;
-
-    sum += s;
-    num_samples++;
-
-    float next_col = current_col + col_delta;
-    if (floor(next_col) > floor(current_col)) {
-
-      float avg = sum / num_samples;
-
-      //printf("avg = %g\n", avg);
-
-      y[(int)floor(current_col)] = (int)(avg * (rows - 1));
-
-      sum = 0.0;
-      num_samples = 0;
-    }
-
-    current_col = next_col;
-  }
-
-  char *print_c = print_buffer;
-  for (int r = 0; r < rows; ++r) {
-    for (int c = 0; c < cols; ++c) {
-      *print_c++ = (y[c] == r ? '*' : ' ');
-    }
-    *print_c++ = '\n';
-  }
-  *print_c = '\0';
-
-  printf("%s", print_buffer);
-}
-
 static void read_entire_file(const char *filename, Sound *sound) {
+  // Open the file.
   NSString *fileName = [NSString stringWithUTF8String:filename];
   NSURL *   fileURL  = [NSURL URLWithString:fileName];
-  
-  OSStatus status = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL,
-                                        &sound->audioFile);
+  OSStatus status    = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL,
+                                           &sound->audioFile);
   print_err_if_bad(status, @"ExtAudioFileOpenURL");
   
+  // Prepare initial buffer structure before we start reading.
   const size_t chunk_size = 8192;
-
-  size_t full_size = 0;
-  char * full_ptr  = NULL;
-
+  size_t full_size        = 0;
+  char * full_ptr         = NULL;
   const int bytesPerFrame = 4;  // TODO Figure this out from the file.
-
-  printf("%s:%d\n", __FILE__, __LINE__);
-
   AudioBuffer audioBuffer = {
     .mNumberChannels = 2,
-    .mDataByteSize   = chunk_size,
-    .mData           = malloc(chunk_size) };
+    .mDataByteSize   = chunk_size };
   AudioBufferList bufferList = { .mNumberBuffers = 1, .mBuffers = audioBuffer };
   UInt32 numFrames, totalFrames = 0;
-  printf("%s:%d\n", __FILE__, __LINE__);
-
-  int num_iters = 0;
 
   do {
-
+    // Update the buffer and numFrames to receive new data.
     AudioBuffer *buffer = &bufferList.mBuffers[0];
-
-    full_size += chunk_size;
-    printf("full_size = %zu\n", full_size);
-    full_ptr   = realloc(full_ptr, full_size);
+    full_size    += chunk_size;
+    full_ptr      = realloc(full_ptr, full_size);
     buffer->mData = full_ptr + full_size - chunk_size;
+    numFrames     = chunk_size / bytesPerFrame;
 
-    // TEMP
-    memset(buffer->mData, 3, chunk_size);
-
-    char *c = (char *)buffer->mData;
-    printf("First 3 bytes = 0x%02X 0x%02X 0x%02X\n", c[0], c[1], c[2]);
-
-    printf("full_ptr = %p\n", full_ptr);
-    printf("buffer->mData = %p\n", buffer->mData);
-    fflush(stdout);
-
-    numFrames = chunk_size / bytesPerFrame;
-
-    printf("%s:%d\n", __FILE__, __LINE__);
-    fflush(stdout);
-
+    // Receive new data.
     OSStatus status = ExtAudioFileRead(sound->audioFile, &numFrames, &bufferList);
     print_err_if_bad(status, @"ExtAudioFileRead");
 
-    printf("%s:%d\n", __FILE__, __LINE__);
-    fflush(stdout);
-
-    printf("numFrames (read) is %d\n", numFrames);
-    fflush(stdout);
-
-    c = (char *)buffer->mData;
-    printf("First 3 bytes = 0x%02X 0x%02X 0x%02X\n", c[0], c[1], c[2]);
-
-    printf("%s:%d\n", __FILE__, __LINE__);
-    fflush(stdout);
-
-    /////
-
-    const float range = INT16_MAX - INT16_MIN;
-    int16_t *samples = (int16_t *)buffer->mData;
-    int i = 3;
-    float sample = ((float)*(samples + 2 * i) - INT16_MIN) / range;
-    printf("a sample = %g\n", sample);
-
-    /////
-
-
-    print_some_frames(buffer->mData, numFrames);
-
     totalFrames += numFrames;
-
-    //exit(0);
-
-    //num_iters++;
-    //if (num_iters == 100) exit(0);
-
   } while (numFrames);
-
-  printf("%s:%d\n", __FILE__, __LINE__);
 
   sound->bytes     = full_ptr;
   sound->num_bytes = totalFrames * bytesPerFrame;
   sound->cursor    = full_ptr;
-
-  // TEMP
-  printf("Read in %d frames for %zu bytes.\n", totalFrames, sound->num_bytes);
 }
 
 void file_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
@@ -240,8 +117,6 @@ void file_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef 
 }
 
 void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
-
-  printf("%s\n", __FUNCTION__);
 
   Sound *sound = (Sound *)userData;
   
@@ -406,13 +281,6 @@ void *sounds_thread(void *arg) {
   }
   return 0;
 }
-
-////////////////////////////////////////////////////////////
-// End caudio copy-over.
-////////////////////////////////////////////////////////////
-
-
-// Internal functions.
 
 static int sayhi(lua_State *L) {
   printf("why hello from sayhi\n");
