@@ -26,6 +26,7 @@ typedef struct {
   char *          cursor;
   int             index;  // Index in the sounds_mt.playing table.
   lua_State *     L;      // This is useful for callback user data.
+  int             is_running;
 } Sound;
 
 
@@ -189,6 +190,8 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
 
     // Enable the sound to be played again.
     sound->cursor = sound->bytes;
+
+    sound->is_running = 0;
   }
 }
 
@@ -292,9 +295,10 @@ static int load_file(lua_State *L) {
   printf("Got the filename '%s'\n", filename);
 
   // push new_obj = {}
-  Sound *sound = lua_newuserdata(L, sizeof(Sound));
-  sound->index = next_index++;
-  sound->L     = L;
+  Sound *sound      = lua_newuserdata(L, sizeof(Sound));
+  sound->index      = next_index++;
+  sound->L          = L;
+  sound->is_running = 0;
 
   // push sounds_mt = {__gc = delete_sound_obj}
   if (luaL_newmetatable(L, sounds_mt)) {
@@ -337,6 +341,9 @@ static void print_stack_types(lua_State *L) {
 // Function to play a loaded sound.
 static int play_sound(lua_State *L) {
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
+
+  // Don't do anything if the sound is already playing.
+  if (sound->is_running) return 0;
 
   AudioStreamBasicDescription audioDesc;
   UInt32 audioDescSize = sizeof(audioDesc);
@@ -385,6 +392,8 @@ static int play_sound(lua_State *L) {
   lua_pushinteger(L, sound->index);
   lua_pushvalue(L, 1);  // -> [self, sounds_mt.playing, self.index, self]
   lua_settable(L, 2);   // Sets playing[self.index] = self.
+
+  sound->is_running = 1;
 
   return 0;
 }
