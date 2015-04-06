@@ -9,3 +9,6 @@ if mt.playing == nil then
 else
   print('#mt.playing =', #mt.playing)
 end
+
+-- Make it easier to call collectgarbage by a human at runtime.
+cg = collectgarbage

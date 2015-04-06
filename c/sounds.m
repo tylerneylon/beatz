@@ -25,6 +25,7 @@ typedef struct {
   size_t          num_bytes;
   char *          cursor;
   int             index;  // Index in the sounds_mt.playing table.
+  lua_State *     L;      // This is useful for callback user data.
 } Sound;
 
 
@@ -153,7 +154,19 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef
   print_err_if_bad(status, @"AudioQueueEnqueueBuffer");
 }
 
-static Boolean is_playing = true;
+// This pushes the sounds_mt.playing table to the top of the stack. It creates
+// the table if it doesn't exist yet.
+static void get_playing_table(lua_State *L) {
+  luaL_getmetatable(L, sounds_mt);   // -> [sounds_mt]
+  lua_getfield(L, -1, "playing");    // -> [sounds_mt, sounds_mt.playing]
+  if (lua_isnil(L, -1)) {
+    lua_pop(L, 1);                   // -> [sounds_mt]
+    lua_newtable(L);                 // -> [sounds_mt, playing]
+    lua_pushvalue(L, -1);            // -> [sounds_mt, playing, playing]
+    lua_setfield(L, -3, "playing");  // -> [sounds_mt, playing]
+  }
+  lua_remove(L, -2);                 // -> [sounds_mt.playing ~= nil]
+}
 
 void running_status_changed(void *userData, AudioQueueRef audioQueue,
                             AudioQueuePropertyID property) {
@@ -164,66 +177,16 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
                                           &is_running,
                                           &property_size);
   print_err_if_bad(status, @"AudioQueueGetProperty");
-  
-  is_playing = !!is_running;
 
-  // TEMP
-  if (!is_playing) {
-    printf("A sound ended.\n");
+  if (!is_running) {
+    // Remove the sound from sounds_mt.playing to allow garbage collection.
+    Sound *sound = (Sound *)userData;
+    lua_State *L = sound->L;
+    get_playing_table(L);              // -> [playing]
+    lua_pushinteger(L, sound->index);  // -> [playing, self.index]
+    lua_pushnil(L);                    // -> [playing, self.index, nil]
+    lua_settable(L, -3);               // -> [playing]
   }
-}
-
-static void open_and_play_a_sound() {
-  NSURL *fileURL = [NSURL URLWithString:@"instruments/practice/a.wav"];
-  
-  ExtAudioFileRef audioFile;
-  OSStatus status = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL, &audioFile);
-  print_err_if_bad(status, @"ExtAudioFileOpenURL");
-  
-  AudioStreamBasicDescription audioDesc;
-  UInt32 audioDescSize = sizeof(audioDesc);
-  
-  status = ExtAudioFileGetProperty(audioFile,
-                                   kExtAudioFileProperty_FileDataFormat,
-                                   &audioDescSize,
-                                   &audioDesc);
-  print_err_if_bad(status, @"ExtAudioFileGetProperty");
-  
-  AudioQueueRef audioQueue;
-  
-  status = AudioQueueNewOutput(&audioDesc,
-                               file_play_callback,
-                               audioFile,  // user data
-                               NULL, /* CFRunLoopGetCurrent(), */
-                               kCFRunLoopCommonModes,
-                               0,     // reserved flags; must be 0
-                               &audioQueue);
-  print_err_if_bad(status, @"AudioQueueNewOutput");
-  
-  for (int i = 0; i < 2; ++i) {
-    UInt32 bufferByteSize = 4 * 1024;
-    AudioQueueBufferRef buffer;
-    status = AudioQueueAllocateBuffer(audioQueue,
-                                      bufferByteSize,
-                                      &buffer);
-    print_err_if_bad(status, @"AudioQueueAllocateBuffer");
-    
-    file_play_callback(audioFile,  // user data
-                       audioQueue,
-                       buffer);
-  }
-  
-  status = AudioQueueAddPropertyListener(audioQueue,
-                                         kAudioQueueProperty_IsRunning,
-                                         running_status_changed,
-                                         NULL);  // user data
-  print_err_if_bad(status, @"AudioQueueAddPropertyListener");
-  
-  status = AudioQueueStart(audioQueue, NULL);  // NULL --> start as soon as possible
-  print_err_if_bad(status, @"AudioQueueStart");
-
-  
-
 }
 
 // Load and prime the file.
@@ -328,6 +291,7 @@ static int load_file(lua_State *L) {
   // push new_obj = {}
   Sound *sound = lua_newuserdata(L, sizeof(Sound));
   sound->index = next_index++;
+  sound->L     = L;
 
   // push sounds_mt = {__gc = delete_sound_obj}
   if (luaL_newmetatable(L, sounds_mt)) {
@@ -365,20 +329,6 @@ static void print_stack_types(lua_State *L) {
     }
   }
   printf("]\n");
-}
-
-// This pushes the sounds_mt.playing table to the top of the stack. It creates
-// the table if it doesn't exist yet.
-static void get_playing_table(lua_State *L) {
-  luaL_getmetatable(L, sounds_mt);   // -> [sounds_mt]
-  lua_getfield(L, -1, "playing");    // -> [sounds_mt, sounds_mt.playing]
-  if (lua_isnil(L, -1)) {
-    lua_pop(L, 1);                   // -> [sounds_mt]
-    lua_newtable(L);                 // -> [sounds_mt, playing]
-    lua_pushvalue(L, -1);            // -> [sounds_mt, playing, playing]
-    lua_setfield(L, -3, "playing");  // -> [sounds_mt, playing]
-  }
-  lua_remove(L, -2);                 // -> [sounds_mt.playing ~= nil]
 }
 
 // Function to play a loaded sound.
@@ -421,7 +371,7 @@ static int play_sound(lua_State *L) {
   status = AudioQueueAddPropertyListener(audioQueue,
                                          kAudioQueueProperty_IsRunning,
                                          running_status_changed,
-                                         NULL);  // user data
+                                         sound);  // user data
   print_err_if_bad(status, @"AudioQueueAddPropertyListener");
   
   status = AudioQueueStart(audioQueue, NULL);  // NULL --> start as soon as possible
