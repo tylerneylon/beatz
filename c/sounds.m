@@ -348,6 +348,25 @@ static int load_file(lua_State *L) {
   return 1;
 }
 
+// For debugging.
+static void print_stack_types(lua_State *L) {
+  printf("Stack types: [");
+  int n = lua_gettop(L);
+  for (int i = 1; i <= n; ++i) {
+    printf(i == 1 ? "" : ", ");
+    int tp = lua_type(L, i);
+    const char *typename = lua_typename(L, tp);
+    printf("%s", typename);
+    if (tp == LUA_TTABLE || tp == LUA_TUSERDATA) {
+      lua_pushvalue(L, i);
+      const void *ptr = lua_topointer(L, -1);
+      lua_pop(L, 1);
+      printf("(%p)", ptr);
+    }
+  }
+  printf("]\n");
+}
+
 // This pushes the sounds_mt.playing table to the top of the stack. It creates
 // the table if it doesn't exist yet.
 static void get_playing_table(lua_State *L) {
@@ -357,7 +376,7 @@ static void get_playing_table(lua_State *L) {
     lua_pop(L, 1);                   // -> [sounds_mt]
     lua_newtable(L);                 // -> [sounds_mt, playing]
     lua_pushvalue(L, -1);            // -> [sounds_mt, playing, playing]
-    lua_setfield(L, -2, "playing");  // -> [sounds_mt, playing]
+    lua_setfield(L, -3, "playing");  // -> [sounds_mt, playing]
   }
   lua_remove(L, -2);                 // -> [sounds_mt.playing ~= nil]
 }
