@@ -186,6 +186,9 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
     lua_pushinteger(L, sound->index);  // -> [playing, self.index]
     lua_pushnil(L);                    // -> [playing, self.index, nil]
     lua_settable(L, -3);               // -> [playing]
+
+    // Enable the sound to be played again.
+    sound->cursor = sound->bytes;
   }
 }
 
