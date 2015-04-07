@@ -279,60 +279,6 @@ static int delete_sound_obj(lua_State* L) {
   return 0;
 }
 
-// Function to load an audio file.
-static int load_file(lua_State *L) {
-  // TEMP TODO Remove debug stuff and clean up this fn.
-  printf("start of %s\n", __FUNCTION__);
-
-  // TODO Test behavior when no param or a nonstring is given.
-  const char *filename = luaL_checkstring(L, 1);
-
-  printf("Got the filename '%s'\n", filename);
-
-  // push new_obj = {}
-  Sound *sound      = lua_newuserdata(L, sizeof(Sound));
-  sound->index      = next_index++;
-  sound->L          = L;
-  sound->is_running = 0;
-
-  // push sounds_mt = {__gc = delete_sound_obj}
-  if (luaL_newmetatable(L, sounds_mt)) {
-    lua_pushcfunction(L, delete_sound_obj);
-    lua_setfield(L, -2, "__gc");
-    lua_getglobal(L, "sounds");
-    lua_setfield(L, -2, "__index");
-  }
-
-  // setmetatable(new_obj, sounds_mt)
-  lua_setmetatable(L, -2);
-
-  read_entire_file(filename, sound);
-  //sound->queue = load_queue_for_file(filename);
-
-  printf("end of %s\n", __FUNCTION__);
-
-  return 1;
-}
-
-// For debugging.
-static void print_stack_types(lua_State *L) {
-  printf("Stack types: [");
-  int n = lua_gettop(L);
-  for (int i = 1; i <= n; ++i) {
-    printf(i == 1 ? "" : ", ");
-    int tp = lua_type(L, i);
-    const char *typename = lua_typename(L, tp);
-    printf("%s", typename);
-    if (tp == LUA_TTABLE || tp == LUA_TUSERDATA) {
-      lua_pushvalue(L, i);
-      const void *ptr = lua_topointer(L, -1);
-      lua_pop(L, 1);
-      printf("(%p)", ptr);
-    }
-  }
-  printf("]\n");
-}
-
 // Function to play a loaded sound.
 static int play_sound(lua_State *L) {
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
@@ -393,12 +339,69 @@ static int play_sound(lua_State *L) {
   return 0;
 }
 
+// Function to load an audio file.
+static int load_file(lua_State *L) {
+  // TEMP TODO Remove debug stuff and clean up this fn.
+  printf("start of %s\n", __FUNCTION__);
+
+  // TODO Test behavior when no param or a nonstring is given.
+  const char *filename = luaL_checkstring(L, 1);
+
+  printf("Got the filename '%s'\n", filename);
+
+  // push new_obj = {}
+  Sound *sound      = lua_newuserdata(L, sizeof(Sound));
+  sound->index      = next_index++;
+  sound->L          = L;
+  sound->is_running = 0;
+
+  // push sounds_mt = {__gc = delete_sound_obj}
+  if (luaL_newmetatable(L, sounds_mt)) {
+    lua_pushcfunction(L, delete_sound_obj);
+    lua_setfield(L, -2, "__gc");
+
+    lua_pushvalue(L, -1);
+    lua_setfield(L, -2, "__index");
+
+    lua_pushcfunction(L, play_sound);
+    lua_setfield(L, -2, "play");
+  }
+
+  // setmetatable(new_obj, sounds_mt)
+  lua_setmetatable(L, -2);
+
+  read_entire_file(filename, sound);
+  //sound->queue = load_queue_for_file(filename);
+
+  printf("end of %s\n", __FUNCTION__);
+
+  return 1;
+}
+
+// For debugging.
+static void print_stack_types(lua_State *L) {
+  printf("Stack types: [");
+  int n = lua_gettop(L);
+  for (int i = 1; i <= n; ++i) {
+    printf(i == 1 ? "" : ", ");
+    int tp = lua_type(L, i);
+    const char *typename = lua_typename(L, tp);
+    printf("%s", typename);
+    if (tp == LUA_TTABLE || tp == LUA_TUSERDATA) {
+      lua_pushvalue(L, i);
+      const void *ptr = lua_topointer(L, -1);
+      lua_pop(L, 1);
+      printf("(%p)", ptr);
+    }
+  }
+  printf("]\n");
+}
+
 
 // Data for the exported sounds table.
 
 static const struct luaL_Reg sounds[] = {
   {"load", load_file},
-  {"play", play_sound},
   {NULL, NULL}
 };
 
