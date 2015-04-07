@@ -17,10 +17,7 @@
 static int next_index = 1;
 
 typedef struct {
-  AudioQueueRef   queue;  // TODO Is this used?
-  // TODO Either remove audioFile by using it entirely within read_entire_file
-  //      or garbage collect it properly. Either way, make sure it's closed.
-  ExtAudioFileRef             audioFile;
+  AudioQueueRef               queue;  // TODO Is this used?
   char *                      bytes;
   size_t                      num_bytes;
   char *                      cursor;
@@ -46,8 +43,9 @@ static void read_entire_file(const char *filename, Sound *sound) {
   // Open the file.
   NSString *fileName = [NSString stringWithUTF8String:filename];
   NSURL *   fileURL  = [NSURL URLWithString:fileName];
+  ExtAudioFileRef audioFile;
   OSStatus status    = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL,
-                                           &sound->audioFile);
+                                           &audioFile);
   print_err_if_bad(status, @"ExtAudioFileOpenURL");
   
   // Prepare initial buffer structure before we start reading.
@@ -70,7 +68,7 @@ static void read_entire_file(const char *filename, Sound *sound) {
     numFrames     = chunk_size / bytesPerFrame;
 
     // Receive new data.
-    OSStatus status = ExtAudioFileRead(sound->audioFile, &numFrames, &bufferList);
+    OSStatus status = ExtAudioFileRead(audioFile, &numFrames, &bufferList);
     print_err_if_bad(status, @"ExtAudioFileRead");
 
     totalFrames += numFrames;
@@ -81,13 +79,13 @@ static void read_entire_file(const char *filename, Sound *sound) {
   sound->cursor    = full_ptr;
 
   UInt32 audioDescSize = sizeof(sound->audioDesc);
-  status = ExtAudioFileGetProperty(sound->audioFile,
+  status = ExtAudioFileGetProperty(audioFile,
                                    kExtAudioFileProperty_FileDataFormat,
                                    &audioDescSize,
                                    &sound->audioDesc);
   print_err_if_bad(status, @"ExtAudioFileGetProperty");
 
-  status = ExtAudioFileDispose(sound->audioFile);
+  status = ExtAudioFileDispose(audioFile);
   print_err_if_bad(status, @"ExtAudioFileDispose");
 }
 
