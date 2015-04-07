@@ -261,11 +261,6 @@ void *sounds_thread(void *arg) {
   return 0;
 }
 
-static int sayhi(lua_State *L) {
-  printf("why hello from sayhi\n");
-  return 0;
-}
-
 // TODO cleanup
 
 
@@ -402,7 +397,6 @@ static int play_sound(lua_State *L) {
 // Data for the exported sounds table.
 
 static const struct luaL_Reg sounds[] = {
-  {"sayhi", sayhi},
   {"load", load_file},
   {"play", play_sound},
   {NULL, NULL}
