@@ -6,7 +6,7 @@
 #include "luajit/lauxlib.h"
 #import <Foundation/Foundation.h>
 #import <AudioToolbox/AudioToolbox.h>
-#include <pthread.h>
+
 
 // This is the Lua registry key for the sounds metatable.
 #define sounds_mt "sounds_mt"
@@ -204,17 +204,6 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
   }
 }
 
-void *sounds_thread(void *arg) {
-  @autoreleasepool {
-    while (1) {
-      CFRunLoopRunInMode(kCFRunLoopDefaultMode,
-                         0.25,     // run time
-                         false);   // run for full run time
-    }
-  }
-  return 0;
-}
-
 // TODO cleanup
 
 
@@ -354,13 +343,6 @@ static const struct luaL_Reg sounds[] = {
 // Public functions.
 
 int luaopen_sounds(lua_State *L) {
-
-  pthread_t pthread;
-  int err = pthread_create(&pthread,       // receive thread id
-                           NULL,           // NULL --> use default attributes
-                           sounds_thread,  // init function
-                           NULL);          // init function arg
-
   luaL_register(L, "sounds", sounds);
   return 1;
 }
