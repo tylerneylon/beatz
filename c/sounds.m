@@ -30,6 +30,8 @@ typedef struct {
 
 // Internal functions.
 
+// TODO Move this into a separate objective-C file for reference on
+//      how to extract specific error information.
 static void print_err_if_bad(OSStatus status, NSString *whence) {
   if (status == 0) return;
   
@@ -57,7 +59,7 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
                                    &sound->audioDesc);
   if (status != 0) {
     // Doesn't return.
-    luaL_error(L, "Unable to read properties of audio file '%'s", filename);
+    luaL_error(L, "Unable to read properties of audio file '%s'", filename);
   }
 
   // Prepare initial buffer structure before we start reading.
@@ -81,6 +83,10 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
 
     // Receive new data.
     OSStatus status = ExtAudioFileRead(audioFile, &numFrames, &bufferList);
+    if (status != 0) {
+      // Doesn't return.
+      luaL_error(L, "Error while reading file '%s'", filename);
+    }
     print_err_if_bad(status, @"ExtAudioFileRead");
 
     totalFrames += numFrames;
@@ -110,7 +116,9 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef
 
   if (num_bytes_left == 0) {
     OSStatus status = AudioQueueStop(inAQ, false);  // false --> not immediately
-    print_err_if_bad(status, @"AudioQueueStop");
+    if (status != 0) {
+      printf("Warning: error while stopping a sound.\n");  // Non-fatal error.
+    }
     return;
   }
 
@@ -125,7 +133,10 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef
                                             buffer,
                                             0,
                                             NULL);
-  print_err_if_bad(status, @"AudioQueueEnqueueBuffer");
+  if (status != 0) {
+    // Doesn't return.
+    luaL_error(sound->L, "Playback error passing audio data to system.");
+  }
 }
 
 // This pushes the sounds_mt.playing table to the top of the stack. It creates
@@ -144,13 +155,16 @@ static void get_playing_table(lua_State *L) {
 
 void running_status_changed(void *userData, AudioQueueRef audioQueue,
                             AudioQueuePropertyID property) {
-  UInt32 is_running;
+  UInt32 is_running = 0;
   UInt32 property_size = sizeof(is_running);
   OSStatus status = AudioQueueGetProperty(audioQueue,
                                           kAudioQueueProperty_IsRunning,
                                           &is_running,
                                           &property_size);
-  print_err_if_bad(status, @"AudioQueueGetProperty");
+  if (status != 0) {
+    // Non-fatal error.
+    printf("Warning: error reading sound properties on play/stop update.\n");
+  }
 
   if (!is_running) {
     // Remove the sound from sounds_mt.playing to allow garbage collection.
@@ -199,7 +213,10 @@ static int play_sound(lua_State *L) {
                                         kCFRunLoopCommonModes,
                                         0,     // reserved flags; must be 0
                                         &audioQueue);
-  print_err_if_bad(status, @"AudioQueueNewOutput");
+  if (status != 0) {
+    // Doesn't return.
+    luaL_error(L, "Error creating new audio output stream.");
+  }
   
   for (int i = 0; i < 2; ++i) {
     UInt32 bufferByteSize = 4 * 1024;
@@ -207,7 +224,10 @@ static int play_sound(lua_State *L) {
     status = AudioQueueAllocateBuffer(audioQueue,
                                       bufferByteSize,
                                       &buffer);
-    print_err_if_bad(status, @"AudioQueueAllocateBuffer");
+    if (status != 0) {
+      // Doesn't return.
+      luaL_error(L, "Error priming audio buffers for playback.");
+    }
     
     sound_play_callback(sound,  // user data
                         audioQueue,
@@ -218,10 +238,15 @@ static int play_sound(lua_State *L) {
                                          kAudioQueueProperty_IsRunning,
                                          running_status_changed,
                                          sound);  // user data
-  print_err_if_bad(status, @"AudioQueueAddPropertyListener");
+  if (status != 0) {
+    // Doesn't return.
+    luaL_error(L, "Error attaching play/stop listener to playback stream.");
+  }
   
   status = AudioQueueStart(audioQueue, NULL);  // NULL --> start as soon as possible
-  print_err_if_bad(status, @"AudioQueueStart");
+  if (status != 0) {
+    luaL_error(L, "Error starting playback.\n");  // Doesn't return.
+  }
 
   // Save another reference to the sound so it doesn't get garbage collected early.
   get_playing_table(L);
