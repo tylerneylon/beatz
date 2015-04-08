@@ -197,6 +197,9 @@ static int delete_sound_obj(lua_State* L) {
   return 0;
 }
 
+#define jump_out_if_bad(status, fmt, ...) \
+        if (status) { luaL_error(L, fmt, ##__VA_ARGS__); }
+
 // Function to play a loaded sound.
 static int play_sound(lua_State *L) {
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
@@ -205,7 +208,6 @@ static int play_sound(lua_State *L) {
   if (sound->is_running) return 0;
 
   AudioQueueRef audioQueue;
-  
   OSStatus status = AudioQueueNewOutput(&sound->audioDesc,
                                         sound_play_callback,
                                         sound,  // user data
@@ -213,10 +215,7 @@ static int play_sound(lua_State *L) {
                                         kCFRunLoopCommonModes,
                                         0,     // reserved flags; must be 0
                                         &audioQueue);
-  if (status != 0) {
-    // Doesn't return.
-    luaL_error(L, "Error creating new audio output stream.");
-  }
+  jump_out_if_bad(status, "Error creating new audio output stream.");
   
   for (int i = 0; i < 2; ++i) {
     UInt32 bufferByteSize = 4 * 1024;
@@ -224,11 +223,7 @@ static int play_sound(lua_State *L) {
     status = AudioQueueAllocateBuffer(audioQueue,
                                       bufferByteSize,
                                       &buffer);
-    if (status != 0) {
-      // Doesn't return.
-      luaL_error(L, "Error priming audio buffers for playback.");
-    }
-    
+    jump_out_if_bad(status, "Error priming audio buffers for playback.");
     sound_play_callback(sound,  // user data
                         audioQueue,
                         buffer);
@@ -238,15 +233,10 @@ static int play_sound(lua_State *L) {
                                          kAudioQueueProperty_IsRunning,
                                          running_status_changed,
                                          sound);  // user data
-  if (status != 0) {
-    // Doesn't return.
-    luaL_error(L, "Error attaching play/stop listener to playback stream.");
-  }
+  jump_out_if_bad(status, "Error attaching play/stop listener to playback stream.");
   
   status = AudioQueueStart(audioQueue, NULL);  // NULL --> start as soon as possible
-  if (status != 0) {
-    luaL_error(L, "Error starting playback.\n");  // Doesn't return.
-  }
+  jump_out_if_bad(status, "Error starting playback.");
 
   // Save another reference to the sound so it doesn't get garbage collected early.
   get_playing_table(L);
