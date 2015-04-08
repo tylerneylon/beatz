@@ -39,14 +39,16 @@ static void print_err_if_bad(OSStatus status, NSString *whence) {
   NSLog(@"The error is %@", error);
 }
 
-static void read_entire_file(const char *filename, Sound *sound) {
+static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
   // Open the file.
   NSString *fileName = [NSString stringWithUTF8String:filename];
   NSURL *   fileURL  = [NSURL URLWithString:fileName];
   ExtAudioFileRef audioFile;
   OSStatus status    = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL,
                                            &audioFile);
-  print_err_if_bad(status, @"ExtAudioFileOpenURL");
+  if (status != 0) {
+    luaL_error(L, "Failed to open file: '%s'", filename);  // Doesn't return.
+  }
   
   // Prepare initial buffer structure before we start reading.
   const size_t chunk_size = 8192;
@@ -87,49 +89,6 @@ static void read_entire_file(const char *filename, Sound *sound) {
 
   status = ExtAudioFileDispose(audioFile);
   print_err_if_bad(status, @"ExtAudioFileDispose");
-}
-
-void file_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
-
-  printf("%s\n", __FUNCTION__);
-  
-  // TODO Set this in a more file-respecting manner.
-  const int bytesPerFrame = 4;
-  
-  UInt32 numFramesCapacity, numFrames;
-  numFramesCapacity = numFrames = buffer->mAudioDataBytesCapacity / bytesPerFrame;
-  
-  ExtAudioFileRef audioFile = (ExtAudioFileRef)userData;
-  assert(audioFile);
-  
-  AudioBuffer audioBuffer = {
-    .mNumberChannels = 2,
-    .mDataByteSize = buffer->mAudioDataBytesCapacity,
-    .mData = buffer->mAudioData };
-  AudioBufferList bufferList = { .mNumberBuffers = 1, .mBuffers = audioBuffer };
-  
-  OSStatus status = ExtAudioFileRead(audioFile, &numFrames, &bufferList);
-  print_err_if_bad(status, @"ExtAudioFileRead");
-  
-  buffer->mAudioDataByteSize = numFrames * bytesPerFrame;
-  
-  if (numFrames > 0) {
-
-    //printf("numFrames = %d\n", numFrames);
-    
-    status = AudioQueueEnqueueBuffer(inAQ,
-                                     buffer,
-                                     0,
-                                     NULL);
-    print_err_if_bad(status, @"AudioQueueEnqueueBuffer");
-  }
-  
-  if (numFrames < numFramesCapacity) {
-    
-    status = AudioQueueStop(inAQ, false);  // false --> not immediately
-    print_err_if_bad(status, @"AudioQueueStop");
-    
-  }
 }
 
 void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
@@ -284,10 +243,15 @@ static int load_file(lua_State *L) {
   printf("Got the filename '%s'\n", filename);
 
   // push new_obj = {}
-  Sound *sound      = lua_newuserdata(L, sizeof(Sound));
-  sound->index      = next_index++;
-  sound->L          = L;
-  sound->is_running = 0;
+  Sound *sound = lua_newuserdata(L, sizeof(Sound));
+  *sound = (Sound) {
+    .bytes      = NULL,
+    .num_bytes  = 0,
+    .cursor     = NULL,
+    .index      = next_index++,
+    .L          = L,
+    .is_running = 0
+  };
 
   // push sounds_mt = {__gc = delete_sound_obj}
   if (luaL_newmetatable(L, sounds_mt)) {
@@ -304,7 +268,7 @@ static int load_file(lua_State *L) {
   // setmetatable(new_obj, sounds_mt)
   lua_setmetatable(L, -2);
 
-  read_entire_file(filename, sound);
+  read_entire_file(L, filename, sound);
   //sound->queue = load_queue_for_file(filename);
 
   printf("end of %s\n", __FUNCTION__);
