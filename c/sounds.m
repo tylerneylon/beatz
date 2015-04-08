@@ -17,7 +17,7 @@
 static int next_index = 1;
 
 typedef struct {
-  AudioQueueRef               queue;  // TODO Is this used?
+  AudioQueueRef               queue;
   char *                      bytes;
   size_t                      num_bytes;
   char *                      cursor;
@@ -29,6 +29,10 @@ typedef struct {
 
 
 // Internal functions.
+
+// This assumes lua_State *L is in scope, which I consider good practice anyway.
+#define jump_out_if_bad(status, fmt, ...) \
+        if (status) { luaL_error(L, fmt, ##__VA_ARGS__); }
 
 // TODO Move this into a separate objective-C file for reference on
 //      how to extract specific error information.
@@ -48,19 +52,14 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
   ExtAudioFileRef audioFile;
   OSStatus status    = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL,
                                            &audioFile);
-  if (status != 0) {
-    luaL_error(L, "Failed to open file: '%s'", filename);  // Doesn't return.
-  }
+  jump_out_if_bad(status, "Failed to open file: '%s'", filename);
   
   UInt32 audioDescSize = sizeof(sound->audioDesc);
   status = ExtAudioFileGetProperty(audioFile,
                                    kExtAudioFileProperty_FileDataFormat,
                                    &audioDescSize,
                                    &sound->audioDesc);
-  if (status != 0) {
-    // Doesn't return.
-    luaL_error(L, "Unable to read properties of audio file '%s'", filename);
-  }
+  jump_out_if_bad(status, "Unable to read properties of audio file '%s'", filename);
 
   // Prepare initial buffer structure before we start reading.
   const size_t chunk_size = 8192;
@@ -83,11 +82,7 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
 
     // Receive new data.
     OSStatus status = ExtAudioFileRead(audioFile, &numFrames, &bufferList);
-    if (status != 0) {
-      // Doesn't return.
-      luaL_error(L, "Error while reading file '%s'", filename);
-    }
-    print_err_if_bad(status, @"ExtAudioFileRead");
+    jump_out_if_bad(status, "Error while reading file '%s'", filename);
 
     totalFrames += numFrames;
   } while (numFrames);
@@ -106,6 +101,7 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
 void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
 
   Sound *sound = (Sound *)userData;
+  lua_State *L = sound->L;
   
   int bytes_per_frame = sound->audioDesc.mBytesPerFrame;
 
@@ -133,10 +129,7 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef
                                             buffer,
                                             0,
                                             NULL);
-  if (status != 0) {
-    // Doesn't return.
-    luaL_error(sound->L, "Playback error passing audio data to system.");
-  }
+  jump_out_if_bad(status, "Playback error passing audio data to system.");
 }
 
 // This pushes the sounds_mt.playing table to the top of the stack. It creates
@@ -196,9 +189,6 @@ static int delete_sound_obj(lua_State* L) {
   free(sound->bytes);
   return 0;
 }
-
-#define jump_out_if_bad(status, fmt, ...) \
-        if (status) { luaL_error(L, fmt, ##__VA_ARGS__); }
 
 // Function to play a loaded sound.
 static int play_sound(lua_State *L) {
