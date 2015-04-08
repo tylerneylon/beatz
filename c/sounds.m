@@ -25,6 +25,7 @@ typedef struct {
   lua_State *                 L;      // This is useful for callback user data.
   int                         is_running;
   AudioStreamBasicDescription audioDesc;
+  int                         do_stop;
 } Sound;
 
 
@@ -100,9 +101,11 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
 
 void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
 
+  //printf("%s\n", __FUNCTION__);
+
   Sound *sound = (Sound *)userData;
   lua_State *L = sound->L;
-  
+
   int bytes_per_frame = sound->audioDesc.mBytesPerFrame;
 
   UInt32 bytes_capacity = buffer->mAudioDataBytesCapacity;
@@ -110,25 +113,42 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef
 
   assert(num_bytes_left >= 0);
 
-  if (num_bytes_left == 0) {
-    OSStatus status = AudioQueueStop(inAQ, false);  // false --> not immediately
+  int do_stop  = (num_bytes_left == 0 || sound->do_stop);
+  if (do_stop) {
+    //printf("About to stop the sound from within the callback.\n");
+    //printf("AudioQueueStop start\n");
+    // 2nd param may request an immediate stop.
+    OSStatus status = AudioQueueStop(inAQ, sound->do_stop);
+    //printf("AudioQueueStop done\n");
     if (status != 0) {
       printf("Warning: error while stopping a sound.\n");  // Non-fatal error.
     }
-    return;
+    //printf("Callback: setting do_stop = is_running = 0.\n");
+    sound->is_running = 0;
+    sound->do_stop    = 0;
+    sound->cursor     = sound->bytes;
+    num_bytes_left    = sound->num_bytes;
+    //return;
   }
 
   UInt32 bytes_to_copy = bytes_capacity;
   if (num_bytes_left < bytes_capacity) bytes_to_copy = num_bytes_left;
 
+  //printf("Copying starting at point %p\n", sound->cursor);
+
   memcpy(buffer->mAudioData, sound->cursor, bytes_to_copy);
   buffer->mAudioDataByteSize = bytes_to_copy;
   sound->cursor += bytes_to_copy;
 
+  // TEMP
+  //printf("About to enqueue %u bytes.\n", bytes_to_copy);
+
+  //printf("AudioQueueEnqueueBuffer start\n");
   OSStatus status = AudioQueueEnqueueBuffer(inAQ,
                                             buffer,
                                             0,
                                             NULL);
+  //printf("AudioQueueEnqueueBuffer done\n");
   jump_out_if_bad(status, "Playback error passing audio data to system.");
 }
 
@@ -148,16 +168,25 @@ static void get_playing_table(lua_State *L) {
 
 void running_status_changed(void *userData, AudioQueueRef audioQueue,
                             AudioQueuePropertyID property) {
+  // TEMP
+  //printf("%s\n", __FUNCTION__);
+
   UInt32 is_running = 0;
   UInt32 property_size = sizeof(is_running);
+  //printf("AudioQueueGetProperty start\n");
   OSStatus status = AudioQueueGetProperty(audioQueue,
                                           kAudioQueueProperty_IsRunning,
                                           &is_running,
                                           &property_size);
+  //printf("AudioQueueGetProperty done\n");
   if (status != 0) {
     // Non-fatal error.
     printf("Warning: error reading sound properties on play/stop update.\n");
   }
+
+  //printf("Got is_running (not in sound) = %d\n", is_running);
+  
+  // TODO This is bad! This is running Lua stuff concurrently in another thread!
 
   if (!is_running) {
     // Remove the sound from sounds_mt.playing to allow garbage collection.
@@ -167,11 +196,10 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
     lua_pushinteger(L, sound->index);  // -> [playing, self.index]
     lua_pushnil(L);                    // -> [playing, self.index, nil]
     lua_settable(L, -3);               // -> [playing]
-
-    // Enable the sound to be played again.
-    sound->cursor = sound->bytes;
+    lua_pop(L, 1);                     // -> []
 
     sound->is_running = 0;
+    //printf("is_running set to %d\n", sound->is_running);
   }
 }
 
@@ -179,15 +207,66 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
 // that, we add a sound to sound_mt.playing when it starts playing, and remove
 // it from that table when it stops.
 static int delete_sound_obj(lua_State* L) {
+
+  // TEMP
+  //printf("%s start\n", __FUNCTION__);
+
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
 
   // We dispose of the queue synchronously, which is designed to never actually
   // stop a sound from playing, since the sounds_mt.playing table holds every
   // sound until it's done playing (so it won't be collected till then).
-  AudioQueueDispose(sound->queue, true);
+  sound->do_stop = true;
+  //OSStatus status = AudioQueueStop(sound->queue, true);
+  //printf("%s after stop, status = %d\n", __FUNCTION__, status);
+  //printf("AudioQueueDispose start\n");
+  AudioQueueDispose(sound->queue, false);
+  //printf("AudioQueueDispose done\n");
+  //printf("%s after dispose\n", __FUNCTION__);
 
   free(sound->bytes);
+
+  //printf("%s end\n", __FUNCTION__);
+
   return 0;
+}
+
+static void setup_queue_for_sound(lua_State *L, Sound *sound) {
+  // TEMP
+  //printf("%s\n", __FUNCTION__);
+
+  //printf("AudioQueueNewOutput start\n");
+  OSStatus status = AudioQueueNewOutput(&sound->audioDesc,
+                                        sound_play_callback,
+                                        sound,  // user data
+                                        NULL, /* CFRunLoopGetCurrent(), */
+                                        kCFRunLoopCommonModes,
+                                        0,     // reserved flags; must be 0
+                                        &sound->queue);
+  //printf("AudioQueueNewOutput done\n");
+  jump_out_if_bad(status, "Error creating new audio output stream.");
+  
+  for (int i = 0; i < 2; ++i) {
+    UInt32 bufferByteSize = 4 * 1024;
+    AudioQueueBufferRef buffer;
+    //printf("AudioQueueAllocateBuffer start\n");
+    status = AudioQueueAllocateBuffer(sound->queue,
+                                      bufferByteSize,
+                                      &buffer);
+    //printf("AudioQueueAllocateBuffer done\n");
+    jump_out_if_bad(status, "Error priming audio buffers for playback.");
+    sound_play_callback(sound,  // user data
+                        sound->queue,
+                        buffer);
+  }
+  
+  //printf("AudioQueueAddPropertyListener start\n");
+  status = AudioQueueAddPropertyListener(sound->queue,
+                                         kAudioQueueProperty_IsRunning,
+                                         running_status_changed,
+                                         sound);  // user data
+  //printf("AudioQueueAddPropertyListener done\n");
+  jump_out_if_bad(status, "Error attaching play/stop listener to playback stream.");
 }
 
 // Function to play a loaded sound.
@@ -195,37 +274,16 @@ static int play_sound(lua_State *L) {
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
 
   // Don't do anything if the sound is already playing.
-  if (sound->is_running) return 0;
+  if (sound->is_running && !sound->do_stop) return 0;
 
-  AudioQueueRef audioQueue;
-  OSStatus status = AudioQueueNewOutput(&sound->audioDesc,
-                                        sound_play_callback,
-                                        sound,  // user data
-                                        NULL, /* CFRunLoopGetCurrent(), */
-                                        kCFRunLoopCommonModes,
-                                        0,     // reserved flags; must be 0
-                                        &audioQueue);
-  jump_out_if_bad(status, "Error creating new audio output stream.");
-  
-  for (int i = 0; i < 2; ++i) {
-    UInt32 bufferByteSize = 4 * 1024;
-    AudioQueueBufferRef buffer;
-    status = AudioQueueAllocateBuffer(audioQueue,
-                                      bufferByteSize,
-                                      &buffer);
-    jump_out_if_bad(status, "Error priming audio buffers for playback.");
-    sound_play_callback(sound,  // user data
-                        audioQueue,
-                        buffer);
-  }
-  
-  status = AudioQueueAddPropertyListener(audioQueue,
-                                         kAudioQueueProperty_IsRunning,
-                                         running_status_changed,
-                                         sound);  // user data
-  jump_out_if_bad(status, "Error attaching play/stop listener to playback stream.");
-  
-  status = AudioQueueStart(audioQueue, NULL);  // NULL --> start as soon as possible
+  sound->do_stop = 0;
+  sound->is_running = 1;
+  //printf("is_running set to 1\n");
+
+  if (sound->queue == NULL) setup_queue_for_sound(L, sound);
+  //printf("AudioQueueStart start\n");
+  OSStatus status = AudioQueueStart(sound->queue, NULL);  // NULL --> start now
+  //printf("AudioQueueStart done\n");
   jump_out_if_bad(status, "Error starting playback.");
 
   // Save another reference to the sound so it doesn't get garbage collected early.
@@ -234,31 +292,41 @@ static int play_sound(lua_State *L) {
   lua_pushvalue(L, 1);  // -> [self, sounds_mt.playing, self.index, self]
   lua_settable(L, 2);   // Sets playing[self.index] = self.
 
-  sound->is_running = 1;
-
   return 0;
+}
+
+static int stop_sound(lua_State *L) {
+  Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
+  if (sound->is_running) {
+    sound->do_stop = true;
+    sound->cursor = sound->bytes;
+  }
+  return 0;  // Number of return values.
 }
 
 // Function to load an audio file.
 static int load_file(lua_State *L) {
   // TEMP TODO Remove debug stuff and clean up this fn.
-  printf("start of %s\n", __FUNCTION__);
+  //printf("start of %s\n", __FUNCTION__);
 
   // TODO Test behavior when no param or a nonstring is given.
   const char *filename = luaL_checkstring(L, 1);
 
-  printf("Got the filename '%s'\n", filename);
+  //printf("Got the filename '%s'\n", filename);
 
   // push new_obj = {}
   Sound *sound = lua_newuserdata(L, sizeof(Sound));
   *sound = (Sound) {
+    .queue      = NULL,
     .bytes      = NULL,
     .num_bytes  = 0,
     .cursor     = NULL,
     .index      = next_index++,
     .L          = L,
-    .is_running = 0
+    .is_running = 0,
+    .do_stop    = 0
   };
+  //printf("is_running set to 0\n");
 
   // push sounds_mt = {__gc = delete_sound_obj}
   if (luaL_newmetatable(L, sounds_mt)) {
@@ -270,6 +338,9 @@ static int load_file(lua_State *L) {
 
     lua_pushcfunction(L, play_sound);
     lua_setfield(L, -2, "play");
+
+    lua_pushcfunction(L, stop_sound);
+    lua_setfield(L, -2, "stop");
   }
 
   // setmetatable(new_obj, sounds_mt)
@@ -278,7 +349,7 @@ static int load_file(lua_State *L) {
   read_entire_file(L, filename, sound);
   //sound->queue = load_queue_for_file(filename);
 
-  printf("end of %s\n", __FUNCTION__);
+  //printf("end of %s\n", __FUNCTION__);
 
   return 1;
 }
