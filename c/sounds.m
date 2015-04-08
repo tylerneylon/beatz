@@ -50,11 +50,21 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
     luaL_error(L, "Failed to open file: '%s'", filename);  // Doesn't return.
   }
   
+  UInt32 audioDescSize = sizeof(sound->audioDesc);
+  status = ExtAudioFileGetProperty(audioFile,
+                                   kExtAudioFileProperty_FileDataFormat,
+                                   &audioDescSize,
+                                   &sound->audioDesc);
+  if (status != 0) {
+    // Doesn't return.
+    luaL_error(L, "Unable to read properties of audio file '%'s", filename);
+  }
+
   // Prepare initial buffer structure before we start reading.
   const size_t chunk_size = 8192;
   size_t full_size        = 0;
   char * full_ptr         = NULL;
-  const int bytesPerFrame = 4;  // TODO Figure this out from the file.
+  int bytes_per_frame     = sound->audioDesc.mBytesPerFrame;
   AudioBuffer audioBuffer = {
     .mNumberChannels = 2,
     .mDataByteSize   = chunk_size };
@@ -67,7 +77,7 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
     full_size    += chunk_size;
     full_ptr      = realloc(full_ptr, full_size);
     buffer->mData = full_ptr + full_size - chunk_size;
-    numFrames     = chunk_size / bytesPerFrame;
+    numFrames     = chunk_size / bytes_per_frame;
 
     // Receive new data.
     OSStatus status = ExtAudioFileRead(audioFile, &numFrames, &bufferList);
@@ -77,26 +87,21 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
   } while (numFrames);
 
   sound->bytes     = full_ptr;
-  sound->num_bytes = totalFrames * bytesPerFrame;
+  sound->num_bytes = totalFrames * bytes_per_frame;
   sound->cursor    = full_ptr;
 
-  UInt32 audioDescSize = sizeof(sound->audioDesc);
-  status = ExtAudioFileGetProperty(audioFile,
-                                   kExtAudioFileProperty_FileDataFormat,
-                                   &audioDescSize,
-                                   &sound->audioDesc);
-  print_err_if_bad(status, @"ExtAudioFileGetProperty");
-
   status = ExtAudioFileDispose(audioFile);
-  print_err_if_bad(status, @"ExtAudioFileDispose");
+  if (status != 0) {
+    // Non-fatal error; report but keep going anyway.
+    printf("Warning: failed to close the file '%s'\n", filename);
+  }
 }
 
 void sound_play_callback(void *userData, AudioQueueRef inAQ, AudioQueueBufferRef buffer) {
 
   Sound *sound = (Sound *)userData;
   
-  // TODO Set this in a more file-respecting manner.
-  const int bytesPerFrame = 4;
+  int bytes_per_frame = sound->audioDesc.mBytesPerFrame;
 
   UInt32 bytes_capacity = buffer->mAudioDataBytesCapacity;
   UInt32 num_bytes_left = sound->bytes + sound->num_bytes - sound->cursor;
