@@ -163,21 +163,18 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
   }
 }
 
-// TODO cleanup
-
-
 // We want to avoid deleting an object that's actively being played. To ensure
 // that, we add a sound to sound_mt.playing when it starts playing, and remove
 // it from that table when it stops.
 static int delete_sound_obj(lua_State* L) {
-  // TODO Free up all resources allocated for the sound object.
-  //      (I think it will be the only value on the stack.)
-  printf("***** %s\n", __FUNCTION__);
-
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
 
-  free(sound->bytes);
+  // We dispose of the queue synchronously, which is designed to never actually
+  // stop a sound from playing, since the sounds_mt.playing table holds every
+  // sound until it's done playing (so it won't be collected till then).
+  AudioQueueDispose(sound->queue, true);
 
+  free(sound->bytes);
   return 0;
 }
 
