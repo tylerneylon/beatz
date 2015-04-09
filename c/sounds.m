@@ -34,6 +34,8 @@ typedef struct {
 // Internal function declarations.
 ///////////////////////////////////////////////////////////////////////////////
 
+static void setup_queue_for_sound(lua_State *L, Sound *sound);
+
 void running_status_changed(void *userData, AudioQueueRef audioQueue,
                             AudioQueuePropertyID property);
 void sound_play_callback(void *userData, AudioQueueRef inAQ,
@@ -192,6 +194,9 @@ static int load_file(lua_State *L) {
   lua_setmetatable(L, -2);
 
   read_entire_file(L, filename, sound);
+
+  setup_queue_for_sound(L, sound);
+
   //sound->queue = load_queue_for_file(filename);
 
   //printf("end of %s\n", __FUNCTION__);
@@ -227,6 +232,10 @@ static void setup_queue_for_sound(lua_State *L, Sound *sound) {
                         sound->queue,
                         buffer);
   }
+
+  // 0 --> decode all buffers; NULL --> no need for #decoded frames.
+  status = AudioQueuePrime(sound->queue, 0, NULL);
+  jump_out_if_bad(status, "Error priming audio queue.");
   
   //printf("AudioQueueAddPropertyListener start\n");
   status = AudioQueueAddPropertyListener(sound->queue,
@@ -301,7 +310,6 @@ static int play_sound(lua_State *L) {
   sound->is_running = 1;
   //printf("is_running set to 1\n");
 
-  if (sound->queue == NULL) setup_queue_for_sound(L, sound);
   //printf("AudioQueueStart start\n");
   OSStatus status = AudioQueueStart(sound->queue, NULL);  // NULL --> start now
   //printf("AudioQueueStart done\n");
