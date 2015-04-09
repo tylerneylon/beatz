@@ -13,7 +13,7 @@
 #include "sounds.h"
 
 #include "luajit/lauxlib.h"
-#import <Foundation/Foundation.h>
+
 #import <AudioToolbox/AudioToolbox.h>
 
 
@@ -85,10 +85,13 @@ static void print_stack_types(lua_State *L) {
 
 static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
   // Open the file.
-  NSString *fileName = [NSString stringWithUTF8String:filename];
-  NSURL *   fileURL  = [NSURL URLWithString:fileName];
+  CFURLRef file_url = CFURLCreateFromFileSystemRepresentation(
+      NULL,                     // use default memory allocator
+      (const UInt8 *)filename,  // path
+      strlen(filename),         // path len
+      false);                   // path is not a directory
   ExtAudioFileRef audioFile;
-  OSStatus status    = ExtAudioFileOpenURL((__bridge CFURLRef)fileURL,
+  OSStatus status    = ExtAudioFileOpenURL(file_url,
                                            &audioFile);
   jump_out_if_bad(status, "Failed to open file: '%s'", filename);
   
