@@ -24,7 +24,6 @@ typedef struct {
   size_t                      num_bytes;
   char *                      cursor;
   int                         index;  // Index in the sounds_mt.playing table.
-  lua_State *                 L;      // This is useful for callback user data.
   int                         is_running;
   AudioStreamBasicDescription audioDesc;
   int                         do_stop;
@@ -169,7 +168,6 @@ static int load_file(lua_State *L) {
     .num_bytes  = 0,
     .cursor     = NULL,
     .index      = next_index++,
-    .L          = L,
     .is_running = 0,
     .do_stop    = 0
   };
@@ -338,7 +336,6 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ,
   //printf("%s\n", __FUNCTION__);
 
   Sound *sound = (Sound *)userData;
-  lua_State *L = sound->L;
 
   int bytes_per_frame = sound->audioDesc.mBytesPerFrame;
 
@@ -383,7 +380,9 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ,
                                             0,
                                             NULL);
   //printf("AudioQueueEnqueueBuffer done\n");
-  jump_out_if_bad(status, "Playback error passing audio data to system.");
+  if (status != 0) {
+    printf("Error: playback error passing audio data to system.\n");
+  }
 }
 
 void running_status_changed(void *userData, AudioQueueRef audioQueue,
