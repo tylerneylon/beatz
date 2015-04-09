@@ -1,5 +1,14 @@
 // beatz/c/sounds.m
 //
+// I'm avoiding this being an Objective-C file, but for future ference, here is
+// how I can get more specific error information out of an OSStatus code:
+//
+//
+//  NSError *error = [NSError errorWithDomain:NSOSStatusErrorDomain
+//                                       code:status
+//                                   userInfo:nil];
+//  NSLog(@"The error is %@", error);
+//
 
 #include "sounds.h"
 
@@ -72,17 +81,6 @@ static void print_stack_types(lua_State *L) {
     }
   }
   printf("]\n");
-}
-
-// TODO Move this into a separate objective-C file for reference on
-//      how to extract specific error information.
-static void print_err_if_bad(OSStatus status, NSString *whence) {
-  if (status == 0) return;
-  
-  NSError *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:nil];
-  
-  NSLog(@"Error from %@", whence);
-  NSLog(@"The error is %@", error);
 }
 
 static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
