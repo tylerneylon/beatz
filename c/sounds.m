@@ -155,7 +155,6 @@ static int load_file(lua_State *L) {
   // TEMP TODO Remove debug stuff and clean up this fn.
   //printf("start of %s\n", __FUNCTION__);
 
-  // TODO Test behavior when no param or a nonstring is given.
   const char *filename = luaL_checkstring(L, 1);
 
   //printf("Got the filename '%s'\n", filename);
@@ -411,8 +410,6 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
 
   //printf("Got is_running (not in sound) = %d\n", is_running);
   
-  // TODO This is bad! This is running Lua stuff concurrently in another thread!
-
   if (!is_running) {
     Sound *sound = (Sound *)userData;
     sound->is_running = 0;
