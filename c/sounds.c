@@ -1,4 +1,4 @@
-// beatz/c/sounds.m
+// beatz/c/sounds.c
 //
 // I'm avoiding this being an Objective-C file, but for future ference, here is
 // how I can get more specific error information out of an OSStatus code:
@@ -8,6 +8,9 @@
 //                                       code:status
 //                                   userInfo:nil];
 //  NSLog(@"The error is %@", error);
+//
+// A useful reference for some of the Apple API used can be found by searching
+// Apple docs for "Audio Queue Services Programming Guide."
 //
 
 #include "sounds.h"
