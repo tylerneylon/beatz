@@ -76,6 +76,9 @@ static int update       (lua_State *L);
 #define jump_out_if_bad(status, fmt, ...) \
         if (status) { luaL_error(L, fmt, ##__VA_ARGS__); }
 
+#define warn_if_bad(status, fmt, ...) \
+        if (status) { printf("Warning: " fmt, ##__VA_ARGS__); }
+
 // For debugging.
 static void print_stack_types(lua_State *L) {
   printf("Stack types: [");
@@ -145,10 +148,7 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
   sound->cursor    = full_ptr;
 
   status = ExtAudioFileDispose(audio_file);
-  if (status != 0) {
-    // Non-fatal error; report but keep going anyway.
-    printf("Warning: failed to close the file '%s'\n", filename);
-  }
+  warn_if_bad(status, "failed to close the file '%s'\n", filename);
 }
 
 static void push_metatable(lua_State *L) {
@@ -337,9 +337,8 @@ void sound_play_callback(void *user_data, AudioQueueRef queue,
   if (do_stop) {
     // 2nd param may request an immediate stop.
     OSStatus status = AudioQueueStop(queue, sound->do_stop);
-    if (status != 0) {
-      printf("Warning: error while stopping a sound.\n");  // Non-fatal error.
-    }
+    warn_if_bad(status, "error while stopping a sound.\n");
+
     sound->is_running = 0;
     sound->do_stop    = 0;
     sound->cursor     = sound->bytes;
@@ -357,9 +356,7 @@ void sound_play_callback(void *user_data, AudioQueueRef queue,
                                             buffer,
                                             0,
                                             NULL);
-  if (status != 0) {
-    printf("Error: playback error passing audio data to system.\n");
-  }
+  warn_if_bad(status, "playback error passing audio data to system.\n");
 }
 
 void running_status_changed(void *user_data, AudioQueueRef queue,
@@ -370,10 +367,7 @@ void running_status_changed(void *user_data, AudioQueueRef queue,
                                           kAudioQueueProperty_IsRunning,
                                           &is_running,
                                           &property_size);
-  if (status != 0) {
-    // Non-fatal error.
-    printf("Warning: error reading sound properties on play/stop update.\n");
-  }
+  warn_if_bad(status, "error reading sound properties on play/stop update.\n");
 
   if (!is_running) {
     Sound *sound = (Sound *)user_data;
