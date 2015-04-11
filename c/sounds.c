@@ -1,5 +1,13 @@
 // beatz/c/sounds.c
 //
+// The capitalization style in this file is a tiny bit inconsistent because
+// Apple uses CamelCase while my usual C and Lua style is to use underscores. I
+// decided to use underscores everywhere except when referring directly to
+// Apple-defined symbols.
+//
+// I also use some CamelCase elements when referring to type names; this is
+// consistent with the rest of my personal preferred style.
+//
 // I'm avoiding this being an Objective-C file, but for future ference, here is
 // how I can get more specific error information out of an OSStatus code:
 //
@@ -37,7 +45,7 @@ typedef struct {
   char *                      cursor;
   int                         index;  // Index in the sounds_mt.playing table.
   int                         is_running;
-  AudioStreamBasicDescription audioDesc;
+  AudioStreamBasicDescription audio_desc;
   int                         do_stop;
 } Sound;
 
@@ -48,14 +56,14 @@ typedef struct {
 
 static void setup_queue_for_sound(lua_State *L, Sound *sound);
 
-void running_status_changed(void *userData, AudioQueueRef audioQueue,
-                            AudioQueuePropertyID property);
-void sound_play_callback(void *userData, AudioQueueRef inAQ,
-                         AudioQueueBufferRef buffer);
+void running_status_changed (void *user_data, AudioQueueRef queue,
+                             AudioQueuePropertyID property);
+void sound_play_callback    (void *user_data, AudioQueueRef queue,
+                             AudioQueueBufferRef buffer);
 
-static int delete_sound(lua_State* L);
-static int play_sound(lua_State *L);
-static int stop_sound(lua_State *L);
+static int delete_sound (lua_State* L);
+static int play_sound   (lua_State *L);
+static int stop_sound   (lua_State *L);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -93,49 +101,49 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
       (const UInt8 *)filename,  // path
       strlen(filename),         // path len
       false);                   // path is not a directory
-  ExtAudioFileRef audioFile;
+  ExtAudioFileRef audio_file;
   OSStatus status    = ExtAudioFileOpenURL(file_url,
-                                           &audioFile);
+                                           &audio_file);
   jump_out_if_bad(status, "Failed to open file: '%s'", filename);
   
-  UInt32 audioDescSize = sizeof(sound->audioDesc);
-  status = ExtAudioFileGetProperty(audioFile,
+  UInt32 audio_desc_size = sizeof(sound->audio_desc);
+  status = ExtAudioFileGetProperty(audio_file,
                                    kExtAudioFileProperty_FileDataFormat,
-                                   &audioDescSize,
-                                   &sound->audioDesc);
+                                   &audio_desc_size,
+                                   &sound->audio_desc);
   jump_out_if_bad(status, "Unable to read properties of audio file '%s'", filename);
 
   // Prepare initial buffer structure before we start reading.
   const size_t chunk_size = 8192;
   size_t full_size        = 0;
   char * full_ptr         = NULL;
-  int bytes_per_frame     = sound->audioDesc.mBytesPerFrame;
-  AudioBuffer audioBuffer = {
+  int bytes_per_frame     = sound->audio_desc.mBytesPerFrame;
+  AudioBuffer buffer = {
     .mNumberChannels = 2,
     .mDataByteSize   = chunk_size };
-  AudioBufferList bufferList = { .mNumberBuffers = 1, .mBuffers = audioBuffer };
-  UInt32 numFrames, totalFrames = 0;
+  AudioBufferList buffer_list = { .mNumberBuffers = 1, .mBuffers = buffer };
+  UInt32 num_frames, total_frames = 0;
 
   do {
-    // Update the buffer and numFrames to receive new data.
-    AudioBuffer *buffer = &bufferList.mBuffers[0];
+    // Update the buffer and num_frames to receive new data.
+    AudioBuffer *buffer = &buffer_list.mBuffers[0];
     full_size    += chunk_size;
     full_ptr      = realloc(full_ptr, full_size);
     buffer->mData = full_ptr + full_size - chunk_size;
-    numFrames     = chunk_size / bytes_per_frame;
+    num_frames    = chunk_size / bytes_per_frame;
 
     // Receive new data.
-    OSStatus status = ExtAudioFileRead(audioFile, &numFrames, &bufferList);
+    OSStatus status = ExtAudioFileRead(audio_file, &num_frames, &buffer_list);
     jump_out_if_bad(status, "Error while reading file '%s'", filename);
 
-    totalFrames += numFrames;
-  } while (numFrames);
+    total_frames += num_frames;
+  } while (num_frames);
 
   sound->bytes     = full_ptr;
-  sound->num_bytes = totalFrames * bytes_per_frame;
+  sound->num_bytes = total_frames * bytes_per_frame;
   sound->cursor    = full_ptr;
 
-  status = ExtAudioFileDispose(audioFile);
+  status = ExtAudioFileDispose(audio_file);
   if (status != 0) {
     // Non-fatal error; report but keep going anyway.
     printf("Warning: failed to close the file '%s'\n", filename);
@@ -212,7 +220,7 @@ static void setup_queue_for_sound(lua_State *L, Sound *sound) {
   //printf("%s\n", __FUNCTION__);
 
   //printf("AudioQueueNewOutput start\n");
-  OSStatus status = AudioQueueNewOutput(&sound->audioDesc,
+  OSStatus status = AudioQueueNewOutput(&sound->audio_desc,
                                         sound_play_callback,
                                         sound,  // user data
                                         NULL, /* CFRunLoopGetCurrent(), */
@@ -223,11 +231,11 @@ static void setup_queue_for_sound(lua_State *L, Sound *sound) {
   jump_out_if_bad(status, "Error creating new audio output stream.");
   
   for (int i = 0; i < 2; ++i) {
-    UInt32 bufferByteSize = 4 * 1024;
+    UInt32 buffer_byte_size = 4 * 1024;
     AudioQueueBufferRef buffer;
     //printf("AudioQueueAllocateBuffer start\n");
     status = AudioQueueAllocateBuffer(sound->queue,
-                                      bufferByteSize,
+                                      buffer_byte_size,
                                       &buffer);
     //printf("AudioQueueAllocateBuffer done\n");
     jump_out_if_bad(status, "Error priming audio buffers for playback.");
@@ -341,14 +349,14 @@ static int stop_sound(lua_State *L) {
 // Internal callbacks.
 ///////////////////////////////////////////////////////////////////////////////
 
-void sound_play_callback(void *userData, AudioQueueRef inAQ,
+void sound_play_callback(void *user_data, AudioQueueRef queue,
                          AudioQueueBufferRef buffer) {
 
   //printf("%s\n", __FUNCTION__);
 
-  Sound *sound = (Sound *)userData;
+  Sound *sound = (Sound *)user_data;
 
-  int bytes_per_frame = sound->audioDesc.mBytesPerFrame;
+  int bytes_per_frame = sound->audio_desc.mBytesPerFrame;
 
   UInt32 bytes_capacity = buffer->mAudioDataBytesCapacity;
   UInt32 num_bytes_left = sound->bytes + sound->num_bytes - sound->cursor;
@@ -360,7 +368,7 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ,
     //printf("About to stop the sound from within the callback.\n");
     //printf("AudioQueueStop start\n");
     // 2nd param may request an immediate stop.
-    OSStatus status = AudioQueueStop(inAQ, sound->do_stop);
+    OSStatus status = AudioQueueStop(queue, sound->do_stop);
     //printf("AudioQueueStop done\n");
     if (status != 0) {
       printf("Warning: error while stopping a sound.\n");  // Non-fatal error.
@@ -386,7 +394,7 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ,
   //printf("About to enqueue %u bytes.\n", bytes_to_copy);
 
   //printf("AudioQueueEnqueueBuffer start\n");
-  OSStatus status = AudioQueueEnqueueBuffer(inAQ,
+  OSStatus status = AudioQueueEnqueueBuffer(queue,
                                             buffer,
                                             0,
                                             NULL);
@@ -396,7 +404,7 @@ void sound_play_callback(void *userData, AudioQueueRef inAQ,
   }
 }
 
-void running_status_changed(void *userData, AudioQueueRef audioQueue,
+void running_status_changed(void *user_data, AudioQueueRef queue,
                             AudioQueuePropertyID property) {
   // TEMP
   //printf("%s\n", __FUNCTION__);
@@ -404,7 +412,7 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
   UInt32 is_running = 0;
   UInt32 property_size = sizeof(is_running);
   //printf("AudioQueueGetProperty start\n");
-  OSStatus status = AudioQueueGetProperty(audioQueue,
+  OSStatus status = AudioQueueGetProperty(queue,
                                           kAudioQueueProperty_IsRunning,
                                           &is_running,
                                           &property_size);
@@ -417,7 +425,7 @@ void running_status_changed(void *userData, AudioQueueRef audioQueue,
   //printf("Got is_running (not in sound) = %d\n", is_running);
   
   if (!is_running) {
-    Sound *sound = (Sound *)userData;
+    Sound *sound = (Sound *)user_data;
     sound->is_running = 0;
     //printf("is_running set to %d\n", sound->is_running);
   }
