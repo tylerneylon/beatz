@@ -64,6 +64,7 @@ void sound_play_callback    (void *user_data, AudioQueueRef queue,
 static int delete_sound (lua_State* L);
 static int play_sound   (lua_State *L);
 static int stop_sound   (lua_State *L);
+static int update       (lua_State *L);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -150,24 +151,42 @@ static void read_entire_file(lua_State *L, const char *filename, Sound *sound) {
   }
 }
 
+static void push_metatable(lua_State *L) {
+  // Push table; return early if it already exists.
+  if (luaL_newmetatable(L, sounds_mt) == 0) return;
+
+  // If we get here, the table is pushed but is empty.
+  lua_pushcfunction(L, delete_sound);
+  lua_setfield(L, -2, "__gc");
+
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+
+  lua_pushcfunction(L, play_sound);
+  lua_setfield(L, -2, "play");
+
+  lua_pushcfunction(L, stop_sound);
+  lua_setfield(L, -2, "stop");
+}
+
 // This pushes the sounds_mt.playing table to the top of the stack. It creates
 // the table if it doesn't exist yet.
 static void get_playing_table(lua_State *L) {
-  luaL_getmetatable(L, sounds_mt);   // -> [sounds_mt]
-  lua_getfield(L, -1, "playing");    // -> [sounds_mt, sounds_mt.playing]
+                                     // (Lua stack)
+  push_metatable(L);                 // [sounds_mt]
+  lua_getfield(L, -1, "playing");    // [sounds_mt, sounds_mt.playing]
   if (lua_isnil(L, -1)) {
-    lua_pop(L, 1);                   // -> [sounds_mt]
-    lua_newtable(L);                 // -> [sounds_mt, playing]
-    lua_pushvalue(L, -1);            // -> [sounds_mt, playing, playing]
-    lua_setfield(L, -3, "playing");  // -> [sounds_mt, playing]
+    lua_pop(L, 1);                   // [sounds_mt]
+    lua_newtable(L);                 // [sounds_mt, playing]
+    lua_pushvalue(L, -1);            // [sounds_mt, playing, playing]
+    lua_setfield(L, -3, "playing");  // [sounds_mt, playing]
   }
-  lua_remove(L, -2);                 // -> [sounds_mt.playing ~= nil]
+  lua_remove(L, -2);                 // [sounds_mt.playing ~= nil]
 }
 
 // Function to load an audio file.
 static int load_file(lua_State *L) {
-  // TEMP TODO Remove debug stuff and clean up this fn.
-  //printf("start of %s\n", __FUNCTION__);
+  update(L);  // Release any stopped-playing sounds.
 
   const char *filename = luaL_checkstring(L, 1);
 
@@ -186,20 +205,8 @@ static int load_file(lua_State *L) {
   };
   //printf("is_running set to 0\n");
 
-  // push sounds_mt = {__gc = delete_sound}
-  if (luaL_newmetatable(L, sounds_mt)) {
-    lua_pushcfunction(L, delete_sound);
-    lua_setfield(L, -2, "__gc");
-
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "__index");
-
-    lua_pushcfunction(L, play_sound);
-    lua_setfield(L, -2, "play");
-
-    lua_pushcfunction(L, stop_sound);
-    lua_setfield(L, -2, "stop");
-  }
+  // push sounds_mt = {__gc = delete_sound, etc.}
+  push_metatable(L);
 
   // setmetatable(new_obj, sounds_mt)
   lua_setmetatable(L, -2);
@@ -259,13 +266,14 @@ static void setup_queue_for_sound(lua_State *L, Sound *sound) {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Internal Lua functions.
+// Internal/metatable Lua functions.
 ///////////////////////////////////////////////////////////////////////////////
 
 // We want to avoid deleting an object that's actively being played. To ensure
 // that, we add a sound to sound_mt.playing when it starts playing, and remove
 // it from that table when it stops.
 static int delete_sound(lua_State* L) {
+  update(L);  // Release any stopped-playing sounds.
 
   // TEMP
   //printf("%s start\n", __FUNCTION__);
@@ -312,6 +320,8 @@ static int update(lua_State *L) {
 
 // Function to play a loaded sound.
 static int play_sound(lua_State *L) {
+  update(L);  // Release any stopped-playing sounds.
+
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
 
   // Don't do anything if the sound is already playing.
@@ -336,6 +346,8 @@ static int play_sound(lua_State *L) {
 }
 
 static int stop_sound(lua_State *L) {
+  update(L);  // Release any stopped-playing sounds.
+
   Sound *sound = (Sound *)luaL_checkudata(L, 1, sounds_mt);
   if (sound->is_running) {
     sound->do_stop = true;
