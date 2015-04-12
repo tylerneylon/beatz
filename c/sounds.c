@@ -27,8 +27,6 @@
 
 #import <AudioToolbox/AudioToolbox.h>
 
-// TEMP
-#include <math.h>
 
 // This is the Lua registry key for the sounds metatable.
 #define sounds_mt "sounds_mt"
@@ -49,7 +47,6 @@ typedef struct {
   int                         is_running;
   AudioStreamBasicDescription audio_desc;
   int                         do_stop;
-  int                         is_priming;
   int                         num_to_skip;  // Number of buffers we'll skip.
 } Sound;
 
@@ -225,19 +222,15 @@ static void setup_queue_for_sound(lua_State *L, Sound *sound) {
   jump_out_if_bad(status, "Error creating new audio output stream.");
   
   for (int i = 0; i < 2; ++i) {
-    //UInt32 buffer_byte_size = 4 * 1024;
-    // TEMP
-    UInt32 buffer_byte_size = 16 * 1024;
+    UInt32 buffer_byte_size = 4 * 1024;
     AudioQueueBufferRef buffer;
     status = AudioQueueAllocateBuffer(sound->queue,
                                       buffer_byte_size,
                                       &buffer);
     jump_out_if_bad(status, "Error priming audio buffers for playback.");
-    sound->is_priming = 1;
     sound_play_callback(sound,  // user data
                         sound->queue,
                         buffer);
-    sound->is_priming = 0;
   }
 
   // 0 --> decode all buffers; NULL --> no need for #decoded frames.
@@ -347,60 +340,23 @@ void sound_play_callback(void *user_data, AudioQueueRef queue,
     OSStatus status = AudioQueueStop(queue, sound->do_stop);
     warn_if_bad(status, "error while stopping a sound.\n");
 
-    // TEMP
-    printf("AudioQueueStop called\n");
-
     sound->is_running  = 0;
     sound->do_stop     = 0;
     sound->cursor      = sound->bytes;
     num_bytes_left     = sound->num_bytes;
     sound->num_to_skip = 2;
-
-    printf("cursor reset\n");
   }
 
-  if (0 && !sound->is_running && !sound->is_priming) {
-    static int ind = 0;
-    printf("Setting up artifical buffer with ind = %d\n", ind);
-    const double range = INT16_MAX - INT16_MIN;
+  UInt32 bytes_to_copy = bytes_capacity;
+  if (num_bytes_left < bytes_capacity) bytes_to_copy = num_bytes_left;
 
-    int num_samples = bytes_capacity / sizeof(int16_t);
-    int16_t *samples = (int16_t *)malloc(bytes_capacity);
-    int16_t *next_sample = samples;
-    int freq = 55 * ((ind % 3) + 0);
-    for (int i = 0; i < num_samples; ++i) {
-      double val = 0.3 * sin(freq * i * 2 * M_PI / 16000);
-      *next_sample = (int16_t)(range * ((val + 1) / 2) + INT16_MIN);
-      next_sample++;
-    }
+  memcpy(buffer->mAudioData, sound->cursor, bytes_to_copy);
+  buffer->mAudioDataByteSize = bytes_to_copy;
+  sound->cursor += bytes_to_copy;
 
-    memcpy(buffer->mAudioData, samples, bytes_capacity);
-    buffer->mAudioDataByteSize = bytes_capacity;
-    free(samples);
-
-    ind++;
-
-  } else {
-
-    if (sound->cursor == sound->bytes) {
-      printf("sending in sound start data\n");
-    }
-
-    UInt32 bytes_to_copy = bytes_capacity;
-    if (num_bytes_left < bytes_capacity) bytes_to_copy = num_bytes_left;
-
-    // TEMP
-    printf("bytes_to_copy = %d\n", bytes_to_copy);
-
-    memcpy(buffer->mAudioData, sound->cursor, bytes_to_copy);
-    buffer->mAudioDataByteSize = bytes_to_copy;
-    sound->cursor += bytes_to_copy;
-
-    if (sound->num_to_skip) {
-      sound->cursor = sound->bytes;
-      sound->num_to_skip--;
-    }
-
+  if (sound->num_to_skip) {
+    sound->cursor = sound->bytes;
+    sound->num_to_skip--;
   }
 
   OSStatus status = AudioQueueEnqueueBuffer(queue,
@@ -423,8 +379,6 @@ void running_status_changed(void *user_data, AudioQueueRef queue,
   if (!is_running) {
     Sound *sound = (Sound *)user_data;
     sound->is_running = 0;
-    //sound->cursor     = sound->bytes;
-    //printf("cursor reset\n");
   }
 }
 
