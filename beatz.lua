@@ -12,10 +12,24 @@ is meant to be used to play it.
 A *track* is a collection of loops, along with optional instrumentation
 and repeating data.
 
+TODO Finalize this usage comment.
+
+Projected usage:
+  local beatz = require 'beatz'
+
+  beatz.play('my_file.beatz')
+
+  -- or
+  
+  my_track = beatz.load('my_file.beatz')
+  my_track:play()
+
 --]]
 
 require 'strict'  -- Enforce careful global variable usage.
 
+local events     = require 'events'
+local instrument = require 'instrument'
 
 local beatz = {}
 
@@ -30,7 +44,10 @@ local beatz = {}
 -- Public functions.
 --------------------------------------------------------------------------------
 
--- TODO
+function beatz.play(filename)
+  -- TEMP For now, we'll just play a hard-coded loop.
+  local drums = instrument.load('human_drumkit')
+end
 
 
 --------------------------------------------------------------------------------

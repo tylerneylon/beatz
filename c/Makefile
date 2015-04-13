@@ -1,4 +1,4 @@
-all: sounds.so dir.so
+all: sounds.so dir.so usleep.so
 
 clean:
 	rm *.o *.so
@@ -12,3 +12,7 @@ sounds.so: sounds.h sounds.c
 dir.so: dir.c
 	clang -shared -o dir.so dir.c -lluajit -Lluajit
 	mv dir.so ..
+
+usleep.so: usleep.c
+	clang -shared -o usleep.so usleep.c -lluajit -Lluajit
+	mv usleep.so ..
