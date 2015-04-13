@@ -18,8 +18,8 @@ Projected usage:
 
 require 'strict'  -- Enforce careful global variable usage.
 
-local dir    = require 'dir'
-local sounds = require 'sounds'
+local dir     = require 'dir'
+local rsounds = require 'rsounds'
 
 
 local instrument = {}
@@ -58,7 +58,7 @@ function instrument.load(inst_name)
     local name = filename:match(wav_pattern)
     if name then
       local file_path = dir_path .. '/' .. filename
-      inst.sounds[name] = sounds.load(file_path)
+      inst.sounds[name] = rsounds.load(file_path, 20)
     end
   end
 

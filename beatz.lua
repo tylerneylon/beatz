@@ -30,6 +30,7 @@ require 'strict'  -- Enforce careful global variable usage.
 
 local events     = require 'events'
 local instrument = require 'instrument'
+local usleep     = require 'usleep'
 
 local beatz = {}
 
@@ -45,8 +46,69 @@ local beatz = {}
 --------------------------------------------------------------------------------
 
 function beatz.play(filename)
+  
   -- TEMP For now, we'll just play a hard-coded loop.
+
+  local s = {'a', 'e', 'f', 'b'}
+
+  local track = {
+    { 0, 'a'},
+    { 1, 'b'},
+    { 2, 'e'},
+    { 3.6, 'c'},
+    { 4   , 'd'},
+    { 4.6, 'c'},
+    { 5,  'd'},
+    { 6,    'e'},
+    { 7,   'f'},
+    
+    { 8, 'a'},
+    { 9, 'b'},
+    { 10, 'e'},
+    { 11.6, 'c'},
+    { 12  , 'd'},
+    { 14,   'f'},
+
+    --[[
+    { 3, 'e'},
+    { 4, 'a'},
+    { 5, 'b'},
+    { 6, 'e'},
+    { 7, 'e'},
+    { 8, 'a'},
+    {12, 'f'}
+    --]]
+  }
+  local num_beats = 16
+  local ind = 1
+  local loops_done = 0
+  
+  local play_at_beat = track[ind][1]
+
   local drums = instrument.load('human_drumkit')
+  local i = 0
+  while true do
+
+    if i % 3 == 0 then
+      local this_beat = i / 23
+      --print('this_beat =', this_beat)
+
+      if this_beat >= play_at_beat then
+        drums:play(track[ind][2])
+        ind = ind + 1
+        if ind > #track then
+          ind = 1
+          loops_done = loops_done + 1
+        end
+        play_at_beat = track[ind][1] + loops_done * num_beats
+        --print('play_at_beat =', play_at_beat)
+      end
+
+    end
+
+    usleep(10 * 1000) -- Operate at 100 hz.
+    i = i + 1
+  end
 end
 
 
