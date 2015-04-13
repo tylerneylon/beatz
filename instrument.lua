@@ -18,6 +18,7 @@ Projected usage:
 
 require 'strict'  -- Enforce careful global variable usage.
 
+local dir    = require 'dir'
 local sounds = require 'sounds'
 
 
@@ -32,9 +33,15 @@ local instrument = {}
 -- Class interface.
 -------------------------------------------------------------------------------
 
-function instrument:new()
-  local new_inst = {}
+local Instrument = {}
+
+function Instrument:new()
+  local new_inst = {sounds = {}}
   return setmetatable(new_inst, {__index = self})
+end
+
+function Instrument:play(name)
+  self.sounds[name]:play()
 end
 
 
@@ -43,7 +50,19 @@ end
 -------------------------------------------------------------------------------
 
 function instrument.load(inst_name)
-  
+  local inst = Instrument:new()
+
+  local dir_path = 'instruments/' .. inst_name
+  local wav_pattern = '(.*)%.wav$'
+  for filename in dir.open(dir_path) do
+    local name = filename:match(wav_pattern)
+    if name then
+      local file_path = dir_path .. '/' .. filename
+      inst.sounds[name] = sounds.load(file_path)
+    end
+  end
+
+  return inst
 end
 
 
