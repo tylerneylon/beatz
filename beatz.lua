@@ -56,6 +56,7 @@ function beatz.play(filename)
     { 1, 'b'},
     { 2, 'e'},
     { 3.6, 'c'},
+
     { 4   , 'd'},
     { 4.6, 'c'},
     { 5,  'd'},
