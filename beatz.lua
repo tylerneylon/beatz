@@ -47,7 +47,25 @@ local usleep     = require 'usleep'
 local load_env = {}
 
 function load_env.add_notes(track)
-  -- TODO
+  local chars_per_beat = track.chars_per_beat
+  if chars_per_beat == nil then error('Missing chars_per_beat value') end
+
+  local track_str = track[1]
+  if track_str == nil then error('Missing note data') end
+
+  local notes = {}
+  for i = 1, #track_str do
+    local note = track_str:sub(i, i)
+    if note ~= ' ' then
+      local beat = (i - 1) / chars_per_beat
+      if track.swing and beat % 1 == 0.5 then
+        beat = beat + 0.1
+      end
+      notes[#notes + 1] = {beat, note}
+    end
+  end
+
+  track.notes = notes
 end
 
 function load_env.new_track(track)
@@ -98,6 +116,12 @@ function beatz.play(filename)
   -- TEMP
   print('Main track is:')
   print(string.format('"%s"', tracks[1][1]))
+
+  local notes = tracks[1].notes
+  for _, note in ipairs(notes) do
+    print(note[1], note[2])
+  end
+
 end
 
 function beatz.old_play(filename)

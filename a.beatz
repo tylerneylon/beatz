@@ -8,6 +8,6 @@ chars_per_beat = 4;
 
 ----|1               2               3               4               |
 ----|1 + 2 + 3 + 4 + 1 + 2 + 3 + 4 + 1 + 2 + 3 + 4 + 1 + 2 + 3 + 4 + |
-    'a   b   e c     d c d   e   f   a   b   e     c d       f       ';
+    'a   b   e     c d c d   e   f   a   b   e     c d       f       ';
 }
 
