@@ -66,6 +66,8 @@ function load_env.add_notes(track)
   end
 
   track.notes = notes
+
+  track.num_beats = #track_str / chars_per_beat
 end
 
 function load_env.new_track(track)
@@ -109,63 +111,15 @@ function beatz.play(filename)
 
   local inst = instrument.load(inst_name)
 
+  local track     = tracks[1]
+  local notes     = track.notes
+  local num_beats = track.num_beats
 
-
-
-
-  -- TEMP
-  print('Main track is:')
-  print(string.format('"%s"', tracks[1][1]))
-
-  local notes = tracks[1].notes
-  for _, note in ipairs(notes) do
-    print(note[1], note[2])
-  end
-
-end
-
-function beatz.old_play(filename)
-  
-  -- TEMP For now, we'll just play a hard-coded loop.
-
-  local s = {'a', 'e', 'f', 'b'}
-
-  local track = {
-    { 0, 'a'},
-    { 1, 'b'},
-    { 2, 'e'},
-    { 3.6, 'c'},
-
-    { 4   , 'd'},
-    { 4.6, 'c'},
-    { 5,  'd'},
-    { 6,    'e'},
-    { 7,   'f'},
-    
-    { 8, 'a'},
-    { 9, 'b'},
-    { 10, 'e'},
-    { 11.6, 'c'},
-    { 12  , 'd'},
-    { 14,   'f'},
-
-    --[[
-    { 3, 'e'},
-    { 4, 'a'},
-    { 5, 'b'},
-    { 6, 'e'},
-    { 7, 'e'},
-    { 8, 'a'},
-    {12, 'f'}
-    --]]
-  }
-  local num_beats = 16
   local ind = 1
   local loops_done = 0
-  
-  local play_at_beat = track[ind][1]
 
-  local drums = instrument.load('human_drumkit')
+  local play_at_beat = notes[ind][1]
+
   local i = 0
   while true do
 
@@ -174,13 +128,13 @@ function beatz.old_play(filename)
       --print('this_beat =', this_beat)
 
       if this_beat >= play_at_beat then
-        drums:play(track[ind][2])
+        inst:play(notes[ind][2])
         ind = ind + 1
-        if ind > #track then
+        if ind > #notes then
           ind = 1
           loops_done = loops_done + 1
         end
-        play_at_beat = track[ind][1] + loops_done * num_beats
+        play_at_beat = notes[ind][1] + loops_done * num_beats
         --print('play_at_beat =', play_at_beat)
       end
 
