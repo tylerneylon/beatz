@@ -28,10 +28,6 @@ Projected usage:
 
 require 'strict'  -- Enforce careful global variable usage.
 
-local events     = require 'events'
-local instrument = require 'instrument'
-local usleep     = require 'usleep'
-
 local beatz = {}
 
 
@@ -39,13 +35,42 @@ local beatz = {}
 -- Require modules.
 --------------------------------------------------------------------------------
 
--- TODO
+local events     = require 'events'
+local instrument = require 'instrument'
+local usleep     = require 'usleep'
+
+
+--------------------------------------------------------------------------------
+-- Internal globals and functions.
+--------------------------------------------------------------------------------
+
+local function new_track(track)
+  table.insert(current_tracks, track)
+end
+
 
 --------------------------------------------------------------------------------
 -- Public functions.
 --------------------------------------------------------------------------------
 
+function beatz.load(filename)
+  local file_fn = loadfile(filename)
+  print('file_fn = ', file_fn)
+  local load_env = {current_tracks = {}, new_track = new_track, table = table}
+  setfenv(file_fn, load_env)
+  setfenv(new_track, load_env)
+  file_fn()
+  return load_env.current_tracks
+end
+
 function beatz.play(filename)
+  local tracks = beatz.load(filename)
+  -- TEMP
+  print('Main track is:')
+  print(string.format('"%s"', tracks[1][1]))
+end
+
+function beatz.old_play(filename)
   
   -- TEMP For now, we'll just play a hard-coded loop.
 
