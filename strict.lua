@@ -16,7 +16,9 @@ if mt == nil then
   setmetatable(_G, mt)
 end
 
-mt.__declared = {}
+-- We hard-code that arg is declared so we can refer to it without
+-- having to explicitly define it.
+mt.__declared = {arg = true}
 
 -- This returns what kind of function is 2 stack levels up.
 local function what()
