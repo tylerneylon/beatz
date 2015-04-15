@@ -41,12 +41,25 @@ local usleep     = require 'usleep'
 
 
 --------------------------------------------------------------------------------
--- Internal globals and functions.
+-- The environment used to load beatz files.
 --------------------------------------------------------------------------------
 
-local function new_track(track)
-  table.insert(current_tracks, track)
+local load_env = {}
+
+function load_env.add_notes(track)
+  -- TODO
 end
+
+function load_env.new_track(track)
+  add_notes(track)
+  table.insert(tracks, track)
+end
+
+-- Let all load_env functions easily call each other.
+for _, f in pairs(load_env) do
+  setfenv(f, load_env)
+end
+load_env.table = table
 
 
 --------------------------------------------------------------------------------
@@ -54,17 +67,34 @@ end
 --------------------------------------------------------------------------------
 
 function beatz.load(filename)
-  local file_fn = loadfile(filename)
-  print('file_fn = ', file_fn)
-  local load_env = {current_tracks = {}, new_track = new_track, table = table}
+  -- Load and parse the file.
+  local file_fn, err_msg = loadfile(filename)
+  if file_fn == nil then error(err_msg) end
+
+  -- Process the file contents.
+  load_env.tracks = {}
   setfenv(file_fn, load_env)
-  setfenv(new_track, load_env)
   file_fn()
-  return load_env.current_tracks
+
+  return load_env.tracks  -- Return the table of loaded tracks.
 end
 
 function beatz.play(filename)
   local tracks = beatz.load(filename)
+
+
+  local track = tracks[1]
+  if track == nil then error('No track to play') end
+
+  local inst_name = track.instrument
+  if inst_name == nil then error('No instrument assigned with track') end
+
+  local inst = instrument.load(inst_name)
+
+
+
+
+
   -- TEMP
   print('Main track is:')
   print(string.format('"%s"', tracks[1][1]))
