@@ -64,6 +64,10 @@ function load_env.add_notes(track)
       notes[#notes + 1] = {beat, note}
     end
   end
+  if not track.loops then
+    local beat = #track_str / chars_per_beat
+    notes[#notes + 1] = {beat, false}  -- Add an end mark.
+  end
 
   track.notes = notes
 
@@ -128,7 +132,10 @@ function beatz.play(filename)
       --print('this_beat =', this_beat)
 
       if this_beat >= play_at_beat then
-        inst:play(notes[ind][2])
+        local note = notes[ind][2]
+        -- Check for an end mark in the track.
+        if note == false then break end
+        inst:play(note)
         ind = ind + 1
         if ind > #notes then
           ind = 1
