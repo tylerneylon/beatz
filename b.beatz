@@ -1,0 +1,81 @@
+A = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a                               '
+}
+
+  B = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a               b               '
+}
+
+C = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a       b   c   d   c   b       '
+}
+
+D = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a       b   c   d     c   b     '
+}
+
+E = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a           b   c   d           '
+}
+
+F = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a     b   c         d           '
+}
+
+G = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 6;
+  ----|1                       |
+  ----|1  +  2  +  3  +  4  +  |
+      'a     b  c  d b c db    '
+}
+
+H = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a       b       a       c       '
+}
+
+I = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a       b       a   b c d b c   '
+}
+
+J = new_track {
+  instrument = 'human_drumkit';
+  chars_per_beat = 8;
+  ----|1                               |
+  ----|1   +   2   +   3   +   4   +   |
+      'a   b c d b c   a       b       '
+}
+
+main_track = {A, A, A, B, B, B, I}

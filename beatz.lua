@@ -77,6 +77,7 @@ end
 function load_env.new_track(track)
   add_notes(track)
   table.insert(tracks, track)
+  return track
 end
 
 -- Let all load_env functions easily call each other.
@@ -85,6 +86,43 @@ for _, f in pairs(load_env) do
 end
 load_env.table = table
 
+local function play_track(track)
+  -- Load the instrument.
+  local inst_name = track.instrument
+  if inst_name == nil then error('No instrument assigned with track') end
+  local inst = instrument.load(inst_name)
+
+  -- Gather notes and set initial playing variables.
+  local notes     = track.notes
+  local num_beats = track.num_beats
+  local ind = 1
+  local loops_done = 0
+  local play_at_beat = notes[ind][1]
+  local i = 0
+
+  -- Play loop.
+  while true do
+    local this_beat = i / 48
+    --print('this_beat =', this_beat)
+
+    if this_beat >= play_at_beat then
+      local note = notes[ind][2]
+      -- Check for an end mark in the track.
+      if note == false then break end
+      inst:play(note)
+      ind = ind + 1
+      if ind > #notes then
+        ind = 1
+        loops_done = loops_done + 1
+      end
+      play_at_beat = notes[ind][1] + loops_done * num_beats
+      --print('play_at_beat =', play_at_beat)
+    end
+
+    usleep(5 * 1000) -- Operate at 200 hz.
+    i = i + 1
+  end
+end
 
 --------------------------------------------------------------------------------
 -- Public functions.
@@ -105,51 +143,9 @@ end
 
 function beatz.play(filename)
   local tracks = beatz.load(filename)
-
-
   local track = tracks[1]
   if track == nil then error('No track to play') end
-
-  local inst_name = track.instrument
-  if inst_name == nil then error('No instrument assigned with track') end
-
-  local inst = instrument.load(inst_name)
-
-  local track     = tracks[1]
-  local notes     = track.notes
-  local num_beats = track.num_beats
-
-  local ind = 1
-  local loops_done = 0
-
-  local play_at_beat = notes[ind][1]
-
-  local i = 0
-  while true do
-
-    if i % 3 == 0 then
-      local this_beat = i / 23
-      --print('this_beat =', this_beat)
-
-      if this_beat >= play_at_beat then
-        local note = notes[ind][2]
-        -- Check for an end mark in the track.
-        if note == false then break end
-        inst:play(note)
-        ind = ind + 1
-        if ind > #notes then
-          ind = 1
-          loops_done = loops_done + 1
-        end
-        play_at_beat = notes[ind][1] + loops_done * num_beats
-        --print('play_at_beat =', play_at_beat)
-      end
-
-    end
-
-    usleep(10 * 1000) -- Operate at 100 hz.
-    i = i + 1
-  end
+  play_track(track)
 end
 
 
