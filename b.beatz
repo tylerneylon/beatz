@@ -78,4 +78,4 @@ J = new_track {
       'a   b c d b c   a       b       '
 }
 
-main_track = {A, A, A, B, B, B, I}
+main_track = {A, A, A, B, B, B, C, B, C, B, A, B, E, B, E, A, F}

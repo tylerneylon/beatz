@@ -41,6 +41,15 @@ local usleep     = require 'usleep'
 
 
 --------------------------------------------------------------------------------
+-- Debug functions.
+--------------------------------------------------------------------------------
+
+local function pr(...)
+  print(string.format(...))
+end
+
+
+--------------------------------------------------------------------------------
 -- The environment used to load beatz files.
 --------------------------------------------------------------------------------
 
@@ -124,6 +133,57 @@ local function play_track(track)
   end
 end
 
+local function ensure_track_has_instrument(track)
+  if track.instrument then return end
+  -- Assume the track is an array of subtracks.
+  -- Get an instrument from the first one of them we can.
+  local t = track[1]
+  ensure_track_has_instrument(t)
+  track.instrument = t.instrument
+end
+
+-- This expects two arrays as inputs.
+local function append_table(t1, t2)
+  for i = 1, #t2 do
+    t1[#t1 + 1] = t2[i]
+  end
+end
+
+-- This also handles the num_beats key.
+local function ensure_track_has_notes(track)
+  if track.notes then return end
+  -- Assume the track is an array of subtracks.
+  -- Get the notes as a sequence built from those.
+  local num_beats = 0
+  local notes = {}
+  for i = 1, #track do
+    --pr('looking at subtrack %d', i)
+    ensure_track_has_notes(track[i])
+    local subnotes = track[i].notes
+    for _, note in ipairs(subnotes) do
+      if note[2] then  -- Don't include end markers.
+        notes[#notes + 1] = {note[1] + num_beats, note[2]}
+        --pr('Just added {%g, %s} to notes', notes[#notes][1], notes[#notes][2])
+      end
+    end
+    num_beats = num_beats + track[i].num_beats
+    --pr('num_beats increased to %g', num_beats)
+  end
+  -- Now add a final end marker.
+  notes[#notes + 1] = {num_beats, false}
+  track.notes       = notes
+  track.num_beats   = num_beats
+end
+
+local function get_processed_main_track(data)
+  local track = data.main_track
+  if track == nil then track = data.tracks[1] end
+  ensure_track_has_instrument(track)
+  ensure_track_has_notes(track)
+  return track
+end
+
+
 --------------------------------------------------------------------------------
 -- Public functions.
 --------------------------------------------------------------------------------
@@ -138,14 +198,21 @@ function beatz.load(filename)
   setfenv(file_fn, load_env)
   file_fn()
 
-  return load_env.tracks  -- Return the table of loaded tracks.
+  return load_env
 end
 
 function beatz.play(filename)
+
+  local data = beatz.load(filename)
+  local track = get_processed_main_track(data)
+  play_track(track)
+
+  --[[
   local tracks = beatz.load(filename)
   local track = tracks[1]
   if track == nil then error('No track to play') end
   play_track(track)
+  --]]
 end
 
 
