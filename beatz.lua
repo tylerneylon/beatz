@@ -53,9 +53,7 @@ end
 -- The environment used to load beatz files.
 --------------------------------------------------------------------------------
 
-local load_env = {}
-
-function load_env.add_notes(track)
+function add_notes(track)
   local chars_per_beat = track.chars_per_beat
   if chars_per_beat == nil then error('Missing chars_per_beat value') end
 
@@ -83,17 +81,30 @@ function load_env.add_notes(track)
   track.num_beats = #track_str / chars_per_beat
 end
 
-function load_env.new_track(track)
+local function new_track(track)
   add_notes(track)
   table.insert(tracks, track)
   return track
 end
 
--- Let all load_env functions easily call each other.
-for _, f in pairs(load_env) do
-  setfenv(f, load_env)
+local function get_new_load_env()
+  local load_env = {
+    -- Add standard library modules.
+    table     = table,
+    -- Add our own functions.
+    add_notes = add_notes,
+    new_track = new_track,
+    -- Initialize globals (global within this table).
+    tracks    = {}
+  }
+  -- Let all load_env functions easily call each other.
+  for _, f in pairs(load_env) do
+    if type(f) == 'function' then
+      setfenv(f, load_env)
+    end
+  end
+  return load_env
 end
-load_env.table = table
 
 local function play_track(track)
   -- Load the instrument.
@@ -188,31 +199,25 @@ end
 -- Public functions.
 --------------------------------------------------------------------------------
 
+-- Returns the data table resulting from running the file as a Lua file within
+-- a new load environment (load_env).
 function beatz.load(filename)
   -- Load and parse the file.
   local file_fn, err_msg = loadfile(filename)
   if file_fn == nil then error(err_msg) end
 
   -- Process the file contents.
-  load_env.tracks = {}
-  setfenv(file_fn, load_env)
+  local data = get_new_load_env()
+  setfenv(file_fn, data)
   file_fn()
 
-  return load_env
+  return data
 end
 
 function beatz.play(filename)
-
   local data = beatz.load(filename)
   local track = get_processed_main_track(data)
   play_track(track)
-
-  --[[
-  local tracks = beatz.load(filename)
-  local track = tracks[1]
-  if track == nil then error('No track to play') end
-  play_track(track)
-  --]]
 end
 
 
