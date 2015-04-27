@@ -1,1 +1,3 @@
-#!/usr/local/bin/luajit beatz.lua
+#!/usr/local/bin/luajit
+local beatz = require 'beatz.beatz'
+beatz.play(arg[1])

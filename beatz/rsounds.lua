@@ -9,10 +9,10 @@ TODO Add usage comments.
 
 --]]
 
-require 'strict'  -- Enforce careful global variable usage.
+require 'beatz.strict'  -- Enforce careful global variable usage.
 
-local sounds = require 'sounds'
 
+local sounds = require 'beatz.sounds'
 
 local rsounds = {}
 
@@ -33,6 +33,7 @@ function ReplayableSound:new(file_path, mode, num_src)
   src.raw_sources = {}
   for i = 1, src.num_sources do
     src.raw_sources[i] = sounds.load(file_path)
+    --print(string.format('Loaded "%s" to %s', file_path, tostring(src.raw_sources[i])))
   end
 
   return src

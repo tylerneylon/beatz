@@ -84,7 +84,7 @@ static const struct luaL_Reg dirlib [] = {
   {NULL, NULL}
 };
 
-int luaopen_dir(lua_State *L) {
+int luaopen_beatz_dir(lua_State *L) {
 
   // Set up our metatable dir_mt.
   luaL_newmetatable(L, dir_mt);

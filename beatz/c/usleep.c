@@ -36,7 +36,7 @@ int lua_usleep(lua_State *L) {
 // Public functions, and data for them.
 ///////////////////////////////////////////////////////////////////////////////
 
-int luaopen_usleep(lua_State *L) {
+int luaopen_beatz_usleep(lua_State *L) {
   lua_pushcfunction(L, lua_usleep);
   return 1;
 }
