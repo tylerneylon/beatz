@@ -261,10 +261,12 @@ end
 
 -- Meant to be called from love.
 function beatz.update(dt)
-  if not is_waiting then
-    time = time + dt
+  if not playing_track then return end
+  local pb = playing_track.playback
+  if not pb.is_waiting then
+    pb.time = pb.time + dt
   end
-  play_at_time(time)
+  play_at_time(pb.time)
 end
 
 -- A note callback is called like so:
